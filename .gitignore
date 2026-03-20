@@ -1,0 +1,29 @@
+# IntelliJ IDEA
+.idea/
+*.iml
+
+# Java / Gradle
+backend/.gradle/
+backend/build/
+frontend/yavimax/.gradle/
+frontend/yavimax/build/
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+frontend-web/node_modules/
+frontend-web/dist/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Other
+*.zip
+*.bat
+gradlew
+gradlew.bat
+gradle/
