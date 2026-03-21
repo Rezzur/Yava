@@ -99,8 +99,8 @@ export const chatApi = {
   getMessages: (chatId: number, page = 0, size = 50) =>
     api.get<MessageDTO[]>(`/chats/${chatId}/messages`, { params: { page, size } }),
   
-  sendMessage: (chatId: number, text: string) =>
-    api.post<MessageDTO>(`/chats/${chatId}/messages`, { text }),
+  sendMessage: (chatId: number, text: string, type = 'TEXT') =>
+    api.post<MessageDTO>(`/chats/${chatId}/messages`, { text, type }),
 };
 
 export default api;

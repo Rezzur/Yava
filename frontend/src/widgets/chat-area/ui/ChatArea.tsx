@@ -1,5 +1,7 @@
 import { useParams } from "react-router-dom";
-import { CHATS, MESSAGES, currentUser } from "@/shared/api/mockData";
+import { useChatStore } from "@/entities/chat/model/chatStore";
+import { useUser } from "@/entities/user/model/useUser";
+import { useWebSocket } from "@/shared/api/websocket";
 import { Search, Phone, MoreVertical, Paperclip, Smile, Mic, Send, Check, CheckCheck, FileText, Image as ImageIcon, User as UserIcon, ChevronDown, Reply, Copy, Trash2, X, PhoneOff, MicOff, Video, Bell, Image, Link as LinkIcon, File } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { clsx } from "clsx";
@@ -10,7 +12,6 @@ export function ChatArea() {
   const [isAttachOpen, setIsAttachOpen] = useState(false);
   const [activeMessageId, setActiveMessageId] = useState<number | null>(null);
   
-  // New states for production features
   const [isCallOpen, setIsCallOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isInfoOpen, setIsInfoOpen] = useState(false);
@@ -21,8 +22,28 @@ export function ChatArea() {
   const messageMenuRef = useRef<HTMLDivElement>(null);
   const emojiMenuRef = useRef<HTMLDivElement>(null);
 
-  const chat = CHATS.find(c => c.id === Number(chatId));
-  const messages = MESSAGES[Number(chatId) || 0] || [];
+  const { user: currentUser } = useUser();
+  const { chats, messages, fetchMessages, sendMessage, isLoading, isMessagesLoading } = useChatStore();
+  const { subscribeToChat } = useWebSocket();
+
+  const chat = chats.find(c => c.id === Number(chatId));
+
+  // Fetch messages when chat changes
+  useEffect(() => {
+    if (chatId) {
+      fetchMessages(Number(chatId));
+    }
+  }, [chatId]);
+
+  // Subscribe to WebSocket for real-time messages
+  useEffect(() => {
+    if (chatId) {
+      const subscription = subscribeToChat(Number(chatId));
+      return () => {
+        subscription?.unsubscribe();
+      };
+    }
+  }, [chatId]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -30,9 +51,8 @@ export function ChatArea() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [chatId, messages]);
+  }, [messages]);
 
-  // Close menus when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (attachMenuRef.current && !attachMenuRef.current.contains(event.target as Node)) setIsAttachOpen(false);
@@ -43,15 +63,36 @@ export function ChatArea() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  if (!chat) return (
+  const handleSendMessage = async () => {
+    if (!inputText.trim() || !chatId) return;
+    await sendMessage(Number(chatId), inputText.trim());
+    setInputText("");
+  };
+
+  const handleSendFile = async (type: 'IMAGE' | 'DOCUMENT') => {
+    // For now, since we don't have a real upload endpoint, 
+    // we'll just send a text message indicating the type
+    if (!chatId) return;
+    const text = type === 'IMAGE' ? "📷 Фотография" : "📄 Документ";
+    await sendMessage(Number(chatId), text);
+    setIsAttachOpen(false);
+  };
+
+  if (!chatId) return (
     <div className="flex-1 bg-[#e4ebf0] dark:bg-slate-950 flex items-center justify-center text-slate-500">
       Выберите чат, чтобы начать общение
     </div>
   );
 
-  const title = chat.title || (chat.user && chat.user.name);
-  const avatar = chat.avatarUrl || (chat.user && chat.user.avatarUrl);
-  const status = chat.type === 'private' ? (chat.user?.status || 'недавно') : `${chat.membersCount?.toLocaleString('ru-RU')} участников`;
+  if (!chat && !isLoading) return (
+    <div className="flex-1 bg-[#e4ebf0] dark:bg-slate-950 flex items-center justify-center text-slate-500">
+      Чат не найден
+    </div>
+  );
+
+  const title = chat?.title || (chat?.user && chat.user.name) || "Чат";
+  const avatar = chat?.avatarUrl || (chat?.user && chat.user.avatarUrl) || `https://i.pravatar.cc/150?u=${chatId}`;
+  const status = chat?.type === 'private' ? (chat?.user?.status || 'недавно') : `${chat?.membersCount || 0} участников`;
 
   const handleEmojiClick = (emoji: string) => {
     setInputText(prev => prev + emoji);
@@ -61,9 +102,7 @@ export function ChatArea() {
   return (
     <div className="flex-1 flex h-full relative z-10 bg-[#e4ebf0] dark:bg-slate-950 overflow-hidden">
       
-      {/* Main Chat Column */}
       <div className="flex-1 flex flex-col h-full relative">
-        {/* Dynamic Background Pattern */}
         <div 
           className="absolute inset-0 z-0 opacity-[0.4] pointer-events-none dark:opacity-[0.1]"
           style={{
@@ -106,19 +145,20 @@ export function ChatArea() {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 z-10 flex flex-col gap-2 relative custom-scrollbar">
-          <div className="text-center my-4">
-            <span className="bg-black/10 dark:bg-white/10 text-white dark:text-slate-300 px-3 py-1 rounded-full text-xs font-medium shadow-sm backdrop-blur-md">
-              Сегодня
-            </span>
-          </div>
+          {isMessagesLoading && messages.length === 0 && (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="w-8 h-8 border-4 border-[#3390ec] border-t-transparent rounded-full animate-spin"></div>
+            </div>
+          )}
+          
           {messages.map((msg) => {
             const isMenuOpen = activeMessageId === msg.id;
-            const isMe = msg.isMe || msg.sender.id === currentUser.id;
+            const isMe = msg.sender.id === currentUser?.id || msg.isMe;
             
             return (
               <div key={msg.id} className={clsx("flex max-w-[70%]", isMe ? "ml-auto" : "mr-auto")}>
-                {!isMe && chat.type === 'group' && (
-                  <img src="https://i.pravatar.cc/150?u=any" className="w-9 h-9 rounded-full mr-2 self-end mb-1" alt="user" />
+                {!isMe && chat?.type === 'group' && (
+                  <img src={msg.sender.avatarUrl || "https://i.pravatar.cc/150?u=" + msg.sender.id} className="w-9 h-9 rounded-full mr-2 self-end mb-1" alt="user" />
                 )}
                 
                 <div 
@@ -129,9 +169,9 @@ export function ChatArea() {
                       : "bg-white dark:bg-[#182533] text-black dark:text-white rounded-bl-none"
                   )}
                 >
-                  {!isMe && chat.type === 'group' && (
+                  {!isMe && chat?.type === 'group' && (
                     <div className="text-[#3390ec] text-sm font-semibold mb-1">
-                      Илья
+                      {msg.sender.name}
                     </div>
                   )}
                   
@@ -140,7 +180,7 @@ export function ChatArea() {
                   </div>
                   
                   <div className="absolute right-2 bottom-1.5 flex items-center gap-1 text-xs text-slate-400">
-                    {msg.timestamp}
+                    {msg.timestamp || new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     {isMe && (
                       <span className="text-[#4caf50]">
                         {msg.isRead ? <CheckCheck className="w-4 h-4" /> : <Check className="w-4 h-4" />}
@@ -148,7 +188,6 @@ export function ChatArea() {
                     )}
                   </div>
 
-                  {/* Dropdown Menu Trigger */}
                   <button 
                     onClick={() => setActiveMessageId(isMenuOpen ? null : msg.id)}
                     className={clsx(
@@ -160,7 +199,6 @@ export function ChatArea() {
                     <ChevronDown className="w-4 h-4" />
                   </button>
 
-                  {/* Context Menu Dropdown */}
                   {isMenuOpen && (
                     <div 
                       ref={messageMenuRef}
@@ -190,12 +228,15 @@ export function ChatArea() {
 
         {/* Input Area */}
         <div className="p-4 z-10 bg-transparent flex justify-center w-full max-w-3xl mx-auto">
-          <div className="flex items-end gap-2 w-full relative">
+          <form 
+            className="flex items-end gap-2 w-full relative"
+            onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }}
+          >
             <div className="flex-1 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 flex items-end p-2 px-3 transition-colors relative">
               
-              {/* Emoji Button & Popover */}
               <div className="relative" ref={emojiMenuRef}>
                 <button 
+                  type="button"
                   onClick={() => setIsEmojiOpen(!isEmojiOpen)}
                   className={clsx("p-2 transition-colors", isEmojiOpen ? "text-[#3390ec]" : "text-slate-400 hover:text-[#3390ec]")}
                 >
@@ -206,6 +247,7 @@ export function ChatArea() {
                     {['😀','😂','🥰','😎','🤔','👍','🔥','🎉','❤️','🙌','👀','😢'].map(emoji => (
                       <button 
                         key={emoji} 
+                        type="button"
                         onClick={() => handleEmojiClick(emoji)}
                         className="text-xl hover:scale-125 transition-transform flex items-center justify-center h-8"
                       >
@@ -219,40 +261,45 @@ export function ChatArea() {
               <textarea 
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
                 placeholder="Сообщение"
                 className="flex-1 bg-transparent border-none outline-none py-2 px-2 text-[16px] resize-none max-h-40 min-h-[40px] dark:text-slate-100 placeholder-slate-400"
                 rows={1}
               />
               
-              {/* Attachment Menu Wrapper */}
               <div className="relative" ref={attachMenuRef}>
                 <button 
+                  type="button"
                   onClick={() => setIsAttachOpen(!isAttachOpen)}
                   className={clsx("p-2 transition-colors", isAttachOpen ? "text-[#3390ec]" : "text-slate-400 hover:text-[#3390ec]")}
                 >
                   <Paperclip className="w-6 h-6" />
                 </button>
 
-                {/* Popover */}
                 {isAttachOpen && (
                   <div className="absolute bottom-full right-0 mb-2 w-56 bg-white dark:bg-slate-900 rounded-2xl shadow-lg border border-slate-100 dark:border-slate-800 p-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                    <div className="flex items-center px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl cursor-pointer transition-colors group">
+                    <div 
+                      onClick={() => handleSendFile('IMAGE')}
+                      className="flex items-center px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl cursor-pointer transition-colors group"
+                    >
                       <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-500 mr-3 group-hover:bg-blue-500 group-hover:text-white transition-colors">
                         <ImageIcon className="w-4 h-4" />
                       </div>
                       <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Фото или видео</span>
                     </div>
-                    <div className="flex items-center px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl cursor-pointer transition-colors group">
+                    <div 
+                      onClick={() => handleSendFile('DOCUMENT')}
+                      className="flex items-center px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl cursor-pointer transition-colors group"
+                    >
                       <div className="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-500 mr-3 group-hover:bg-green-500 group-hover:text-white transition-colors">
                         <FileText className="w-4 h-4" />
                       </div>
                       <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Документ</span>
-                    </div>
-                    <div className="flex items-center px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl cursor-pointer transition-colors group">
-                      <div className="w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-orange-500 mr-3 group-hover:bg-orange-500 group-hover:text-white transition-colors">
-                        <UserIcon className="w-4 h-4" />
-                      </div>
-                      <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Контакт</span>
                     </div>
                   </div>
                 )}
@@ -260,21 +307,16 @@ export function ChatArea() {
 
             </div>
             <button 
+              type="submit"
               className="w-12 h-12 rounded-full bg-[#3390ec] text-white flex items-center justify-center shadow-md hover:bg-[#2884e0] transition-all active:scale-95 shrink-0"
-              onClick={() => {
-                if (inputText.trim()) {
-                  // Here we will call our feature send-message later
-                  setInputText("");
-                }
-              }}
             >
               {inputText.trim() ? <Send className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
             </button>
-          </div>
+          </form>
         </div>
       </div>
 
-      {/* Chat Info Sidebar (Right) */}
+      {/* Chat Info Sidebar */}
       {isInfoOpen && (
         <div className="w-80 h-full bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 flex flex-col shrink-0 animate-in slide-in-from-right duration-300 z-20">
           <div className="h-16 border-b border-slate-200 dark:border-slate-800 flex items-center px-4 shrink-0">
@@ -300,65 +342,9 @@ export function ChatArea() {
                 </div>
               </div>
             </div>
-            
-            <div className="h-2 bg-[#f4f4f5] dark:bg-slate-950"></div>
-
-            <div className="p-4">
-              <div className="text-sm font-bold text-[#3390ec] uppercase tracking-wider mb-4 px-2">Медиа и файлы</div>
-              <div className="flex justify-around">
-                <div className="flex flex-col items-center gap-1 cursor-pointer group">
-                  <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-blue-500 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30 transition-colors">
-                    <Image className="w-6 h-6" />
-                  </div>
-                  <span className="text-xs text-slate-500 font-medium">12 Медиа</span>
-                </div>
-                <div className="flex flex-col items-center gap-1 cursor-pointer group">
-                  <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-green-500 group-hover:bg-green-100 dark:group-hover:bg-green-900/30 transition-colors">
-                    <File className="w-6 h-6" />
-                  </div>
-                  <span className="text-xs text-slate-500 font-medium">4 Файла</span>
-                </div>
-                <div className="flex flex-col items-center gap-1 cursor-pointer group">
-                  <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-purple-500 group-hover:bg-purple-100 dark:group-hover:bg-purple-900/30 transition-colors">
-                    <LinkIcon className="w-6 h-6" />
-                  </div>
-                  <span className="text-xs text-slate-500 font-medium">8 Ссылок</span>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       )}
-
-      {/* Call Modal Overlay */}
-      {isCallOpen && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/95 backdrop-blur-xl flex flex-col items-center justify-between py-16 animate-in fade-in zoom-in-95 duration-300">
-          <div className="flex flex-col items-center mt-12">
-            <div className="relative mb-6">
-              <div className="absolute inset-0 bg-[#3390ec] rounded-full animate-ping opacity-20 scale-150"></div>
-              <img src={avatar} className="w-40 h-40 rounded-full object-cover relative z-10 border-4 border-slate-800 shadow-2xl" alt={title} />
-            </div>
-            <h2 className="text-3xl font-bold text-white mb-2">{title}</h2>
-            <div className="text-slate-400 text-lg">Вызов...</div>
-          </div>
-          
-          <div className="flex items-center gap-8 mb-12">
-            <button className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center text-white hover:bg-slate-700 transition-colors shadow-lg">
-              <MicOff className="w-7 h-7" />
-            </button>
-            <button className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center text-white hover:bg-slate-700 transition-colors shadow-lg">
-              <Video className="w-7 h-7" />
-            </button>
-            <button 
-              onClick={() => setIsCallOpen(false)}
-              className="w-20 h-20 rounded-full bg-red-500 flex items-center justify-center text-white hover:bg-red-600 transition-colors shadow-lg shadow-red-500/20"
-            >
-              <PhoneOff className="w-8 h-8" />
-            </button>
-          </div>
-        </div>
-      )}
-
     </div>
   );
 }

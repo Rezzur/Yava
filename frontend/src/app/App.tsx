@@ -14,9 +14,13 @@ import { useEffect } from 'react'
 
 function App() {
   const location = useLocation()
+  console.log('Current location:', location.pathname);
+  
   const isAuthPage = location.pathname === '/login'
   const { isAuthenticated, token, fetchChats } = useAuthStore()
   const { fetchCurrentUser } = useUser()
+
+  console.log('Auth status:', { isAuthenticated, hasToken: !!token });
 
   useEffect(() => {
     if (isAuthenticated && token) {
@@ -26,13 +30,16 @@ function App() {
   }, [isAuthenticated, token])
 
   if (isAuthPage) {
+    console.log('Rendering AuthPage');
     return <AuthPage />
   }
 
   if (!isAuthenticated) {
+    console.log('Not authenticated, redirecting to /login');
     return <Navigate to="/login" replace />
   }
 
+  console.log('Rendering Main App');
   return (
     <div className="h-screen w-full bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex overflow-hidden transition-colors">
       <Sidebar />
@@ -50,7 +57,7 @@ function App() {
         </Routes>
       </main>
     </div>
-  )
+  );
 }
 
 export default App

@@ -1,9 +1,10 @@
-import { useState } from "react";
-import { Menu, Search, Users, Radio, Phone, Bookmark, Settings, Moon, Sun, Info, X, Camera, ArrowRight, Check, MessageCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Menu, Search, Users, Radio, Phone, Bookmark, Settings, Moon, Sun, Info, X, Camera, ArrowRight, Check, MessageCircle, UserPlus, LogOut } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { CHATS } from "@/shared/api/mockData";
 import { useTheme } from "@/shared/lib/theme/useTheme";
 import { useUser } from "@/entities/user/model/useUser";
+import { useChatStore } from "@/entities/chat/model/chatStore";
+import { useAuthStore } from "@/entities/user/model/authStore";
 import { clsx } from "clsx";
 
 export function Sidebar() {
@@ -13,18 +14,36 @@ export function Sidebar() {
   const [search, setSearch] = useState("");
   const [groupName, setGroupName] = useState("");
   
-  // Use global stores
   const { theme, toggleTheme } = useTheme();
   const { user } = useUser();
+  const { logout } = useAuthStore();
+  const { chats, searchResults, isSearching, searchUsers, clearSearch, createChat, fetchChats } = useChatStore();
   const isDarkMode = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
   const { chatId } = useParams();
   const navigate = useNavigate();
 
-  const filteredChats = CHATS.filter(c => {
-    const title = c.title || (c.user && c.user.name) || "";
-    return title.toLowerCase().includes(search.toLowerCase());
-  });
+  useEffect(() => {
+    fetchChats();
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (search.trim()) {
+        searchUsers(search);
+      } else {
+        clearSearch();
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const handleUserClick = async (userId: number) => {
+    const chat = await createChat(userId);
+    setSearch("");
+    clearSearch();
+    navigate(`/chat/${chat.id}`);
+  };
 
   const handleCreateGroupOpen = () => {
     setIsDrawerOpen(false);
@@ -38,8 +57,13 @@ export function Sidebar() {
 
   const handleFavoritesClick = () => {
     setIsDrawerOpen(false);
-    navigate('/chat/saved'); // Assume ID 'saved' is handled or will be handled
+    navigate('/chat/saved');
   };
+
+  const filteredChats = chats.filter(c => {
+    const title = c.title || (c.user && c.user.name) || "";
+    return title.toLowerCase().includes(search.toLowerCase());
+  });
 
   return (
     <div className="w-[400px] h-full flex-shrink-0 border-r border-slate-200 bg-white flex flex-col relative z-20 transition-all dark:bg-slate-900 dark:border-slate-800">
@@ -65,56 +89,95 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* Chat List */}
+      {/* Search Results or Chat List */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
-        {filteredChats.map((chat) => {
-          const title = chat.title || (chat.user && chat.user.name);
-          const avatar = chat.avatarUrl || (chat.user && chat.user.avatarUrl);
-          const isActive = chat.id === Number(chatId);
-
-          return (
-            <Link 
-              key={chat.id} 
-              to={`/chat/${chat.id}`}
-              className={clsx(
-                "flex items-center px-3 py-2.5 mx-2 rounded-xl mb-1 cursor-pointer transition-colors",
-                isActive ? "bg-[#3390ec] text-white" : "hover:bg-[#f4f4f5] dark:hover:bg-slate-800 text-slate-900 dark:text-slate-100"
-              )}
-            >
-              <div className="relative shrink-0 w-14 h-14">
-                <img 
-                  src={avatar} 
-                  alt={title} 
-                  className="w-14 h-14 rounded-full object-cover"
-                />
-                {chat.user && chat.user.status === 'в сети' && (
-                  <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white dark:border-slate-900 rounded-full z-10"></div>
-                )}
-              </div>
-              <div className="ml-3 flex-1 overflow-hidden">
-                <div className="flex justify-between items-baseline mb-1">
-                  <span className="font-semibold truncate text-[16px] leading-5">{title}</span>
-                  <span className={clsx("text-xs ml-2 whitespace-nowrap", isActive ? "text-blue-100" : "text-slate-500")}>
-                    {chat.timestamp}
-                  </span>
+        {search.trim() && searchResults.length > 0 && (
+          <div className="mb-4">
+            <div className="px-4 py-2 text-xs font-bold text-[#3390ec] uppercase tracking-wider">
+              Глобальный поиск
+            </div>
+            {searchResults.map((u) => (
+              <div 
+                key={u.id}
+                onClick={() => handleUserClick(u.id)}
+                className="flex items-center px-3 py-2.5 mx-2 rounded-xl mb-1 cursor-pointer hover:bg-[#f4f4f5] dark:hover:bg-slate-800 text-slate-900 dark:text-slate-100 transition-colors"
+              >
+                <div className="relative shrink-0 w-14 h-14">
+                  <img src={u.avatarUrl || "https://i.pravatar.cc/150?u=" + u.id} className="w-14 h-14 rounded-full object-cover" alt={u.name} />
                 </div>
-                <div className="flex justify-between items-start">
-                  <span className={clsx("text-[15px] truncate max-w-[200px]", isActive ? "text-blue-100" : "text-slate-500")}>
-                    {chat.lastMessage}
-                  </span>
-                  {chat.unreadCount > 0 && (
-                    <div className={clsx(
-                      "h-6 min-w-[24px] rounded-full flex items-center justify-center text-[12px] font-bold px-2 ml-2 shrink-0",
-                      isActive ? "bg-white text-[#3390ec]" : "bg-[#c5cdd3] dark:bg-slate-700 text-white dark:text-slate-200"
-                    )}>
-                      {chat.unreadCount}
-                    </div>
+                <div className="ml-3 flex-1 overflow-hidden">
+                  <div className="font-semibold truncate text-[16px]">{u.name}</div>
+                  <div className="text-sm text-slate-500 truncate">@{u.username}</div>
+                </div>
+                <UserPlus className="w-5 h-5 text-[#3390ec] mr-2" />
+              </div>
+            ))}
+            <div className="h-[1px] bg-slate-100 dark:bg-slate-800 my-2 mx-4" />
+          </div>
+        )}
+
+        {filteredChats.length > 0 ? (
+          filteredChats.map((chat) => {
+            const title = chat.title || (chat.user && chat.user.name);
+            const avatar = chat.avatarUrl || (chat.user && chat.user.avatarUrl) || "https://i.pravatar.cc/150?u=" + chat.id;
+            const isActive = chat.id === Number(chatId);
+
+            return (
+              <Link 
+                key={chat.id} 
+                to={`/chat/${chat.id}`}
+                className={clsx(
+                  "flex items-center px-3 py-2.5 mx-2 rounded-xl mb-1 cursor-pointer transition-colors",
+                  isActive ? "bg-[#3390ec] text-white" : "hover:bg-[#f4f4f5] dark:hover:bg-slate-800 text-slate-900 dark:text-slate-100"
+                )}
+              >
+                <div className="relative shrink-0 w-14 h-14">
+                  <img 
+                    src={avatar} 
+                    alt={title} 
+                    className="w-14 h-14 rounded-full object-cover"
+                  />
+                  {chat.user && (chat.user.status === 'в сети' || chat.user.status === 'online') && (
+                    <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white dark:border-slate-900 rounded-full z-10"></div>
                   )}
                 </div>
-              </div>
-            </Link>
-          );
-        })}
+                <div className="ml-3 flex-1 overflow-hidden">
+                  <div className="flex justify-between items-baseline mb-1">
+                    <span className="font-semibold truncate text-[16px] leading-5">{title}</span>
+                    <span className={clsx("text-xs ml-2 whitespace-nowrap", isActive ? "text-blue-100" : "text-slate-500")}>
+                      {chat.timestamp}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-start">
+                    <span className={clsx("text-[15px] truncate max-w-[200px]", isActive ? "text-blue-100" : "text-slate-500")}>
+                      {chat.lastMessage}
+                    </span>
+                    {chat.unreadCount > 0 && (
+                      <div className={clsx(
+                        "h-6 min-w-[24px] rounded-full flex items-center justify-center text-[12px] font-bold px-2 ml-2 shrink-0",
+                        isActive ? "bg-white text-[#3390ec]" : "bg-[#c5cdd3] dark:bg-slate-700 text-white dark:text-slate-200"
+                      )}>
+                        {chat.unreadCount}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </Link>
+            );
+          })
+        ) : !isSearching && search.trim() === "" && chats.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center mt-10">
+            <div className="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-400 mb-4">
+              <MessageCircle className="w-10 h-10" />
+            </div>
+            <div className="text-slate-900 dark:text-white font-semibold mb-2">Чатов пока нет</div>
+            <p className="text-sm text-slate-500">Воспользуйтесь поиском выше, чтобы найти собеседника</p>
+          </div>
+        ) : !isSearching && search.trim() && searchResults.length === 0 && (
+          <div className="p-8 text-center text-slate-500">
+            Ничего не найдено
+          </div>
+        )}
       </div>
 
       {/* Slide Out Main Menu Drawer */}
@@ -184,6 +247,16 @@ export function Sidebar() {
               </div>
               
               <DrawerItem icon={<Info />} text="О Yavimax" onClick={handleAboutOpen} />
+              
+              <div className="h-[1px] bg-slate-100 dark:bg-slate-800 my-2" />
+              <DrawerItem 
+                icon={<LogOut className="text-red-500" />} 
+                text="Выйти" 
+                onClick={() => {
+                  logout();
+                  navigate('/login');
+                }} 
+              />
             </div>
 
             <div className="p-4 text-center text-[12px] text-slate-400 font-medium">
@@ -261,7 +334,7 @@ export function Sidebar() {
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-medium text-[#3390ec]">Кого добавить?</label>
                 <div className="max-h-48 overflow-y-auto custom-scrollbar border border-slate-100 dark:border-slate-800 rounded-xl p-2">
-                  {CHATS.filter(c => c.type === 'private').map((chat, idx) => (
+                  {chats.filter(c => c.type === 'private').map((chat, idx) => (
                     <div key={chat.id} className="flex items-center p-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg cursor-pointer transition-colors group">
                       <div className="relative mr-3">
                         <img src={chat.avatarUrl || (chat.user && chat.user.avatarUrl)} className="w-10 h-10 rounded-full object-cover" alt="User" />
