@@ -101,6 +101,9 @@ export const chatApi = {
   
   sendMessage: (chatId: number, text: string, type = 'TEXT') =>
     api.post<MessageDTO>(`/chats/${chatId}/messages`, { text, type }),
+
+  markAsRead: (chatId: number) =>
+    api.post<void>(`/chats/${chatId}/read`),
 };
 
 export default api;

@@ -5,6 +5,7 @@ import { useTheme } from "@/shared/lib/theme/useTheme";
 import { useUser } from "@/entities/user/model/useUser";
 import { useChatStore } from "@/entities/chat/model/chatStore";
 import { useAuthStore } from "@/entities/user/model/authStore";
+import { Avatar } from "@/shared/ui/Avatar";
 import { clsx } from "clsx";
 
 export function Sidebar() {
@@ -39,10 +40,16 @@ export function Sidebar() {
   }, [search]);
 
   const handleUserClick = async (userId: number) => {
-    const chat = await createChat(userId);
-    setSearch("");
-    clearSearch();
-    navigate(`/chat/${chat.id}`);
+    try {
+      console.log('Creating chat with user:', userId);
+      const chat = await createChat(userId);
+      setSearch("");
+      clearSearch();
+      navigate(`/chat/${chat.id}`);
+    } catch (err) {
+      console.error('Failed to create/open chat:', err);
+      alert('Не удалось открыть чат с этим пользователем');
+    }
   };
 
   const handleCreateGroupOpen = () => {
@@ -102,9 +109,7 @@ export function Sidebar() {
                 onClick={() => handleUserClick(u.id)}
                 className="flex items-center px-3 py-2.5 mx-2 rounded-xl mb-1 cursor-pointer hover:bg-[#f4f4f5] dark:hover:bg-slate-800 text-slate-900 dark:text-slate-100 transition-colors"
               >
-                <div className="relative shrink-0 w-14 h-14">
-                  <img src={u.avatarUrl || "https://i.pravatar.cc/150?u=" + u.id} className="w-14 h-14 rounded-full object-cover" alt={u.name} />
-                </div>
+                <Avatar src={u.avatarUrl} name={u.name} className="shrink-0" />
                 <div className="ml-3 flex-1 overflow-hidden">
                   <div className="font-semibold truncate text-[16px]">{u.name}</div>
                   <div className="text-sm text-slate-500 truncate">@{u.username}</div>
@@ -119,7 +124,6 @@ export function Sidebar() {
         {filteredChats.length > 0 ? (
           filteredChats.map((chat) => {
             const title = chat.title || (chat.user && chat.user.name);
-            const avatar = chat.avatarUrl || (chat.user && chat.user.avatarUrl) || "https://i.pravatar.cc/150?u=" + chat.id;
             const isActive = chat.id === Number(chatId);
 
             return (
@@ -131,12 +135,8 @@ export function Sidebar() {
                   isActive ? "bg-[#3390ec] text-white" : "hover:bg-[#f4f4f5] dark:hover:bg-slate-800 text-slate-900 dark:text-slate-100"
                 )}
               >
-                <div className="relative shrink-0 w-14 h-14">
-                  <img 
-                    src={avatar} 
-                    alt={title} 
-                    className="w-14 h-14 rounded-full object-cover"
-                  />
+                <div className="relative shrink-0">
+                  <Avatar src={chat.avatarUrl || (chat.user && chat.user.avatarUrl)} name={title} />
                   {chat.user && (chat.user.status === 'в сети' || chat.user.status === 'online') && (
                     <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white dark:border-slate-900 rounded-full z-10"></div>
                   )}
@@ -199,11 +199,7 @@ export function Sidebar() {
               
               {user && (
                 <>
-                  <img 
-                    src={user.avatarUrl} 
-                    className="w-16 h-16 rounded-full border-2 border-white/20 mb-4 object-cover"
-                    alt="Me"
-                  />
+                  <Avatar src={user.avatarUrl} name={user.name} size="lg" className="mb-4 border-2 border-white/20" />
                   <div className="font-semibold text-[16px]">{user.name}</div>
                   <div className="text-blue-100 text-sm">{user.phone}</div>
                 </>
@@ -299,7 +295,7 @@ export function Sidebar() {
       {/* Create Group Modal Overlay */}
       {isCreateGroupOpen && (
         <div className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-md overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
             {/* Modal Header */}
             <div className="px-6 py-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-800">
               <h3 className="text-xl font-semibold text-slate-900 dark:text-white">Создать группу</h3>
@@ -337,7 +333,7 @@ export function Sidebar() {
                   {chats.filter(c => c.type === 'private').map((chat, idx) => (
                     <div key={chat.id} className="flex items-center p-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg cursor-pointer transition-colors group">
                       <div className="relative mr-3">
-                        <img src={chat.avatarUrl || (chat.user && chat.user.avatarUrl)} className="w-10 h-10 rounded-full object-cover" alt="User" />
+                        <Avatar src={chat.avatarUrl || (chat.user && chat.user.avatarUrl)} name={chat.title || (chat.user && chat.user.name)} size="sm" />
                         {idx === 0 && (
                           <div className="absolute -bottom-1 -right-1 bg-[#3390ec] rounded-full p-0.5 border border-white dark:border-slate-900">
                             <Check className="w-3 h-3 text-white" />

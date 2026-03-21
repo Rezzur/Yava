@@ -29,7 +29,8 @@ public class ChatMember {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private MemberRole role;
+    @Builder.Default
+    private MemberRole role = MemberRole.MEMBER;
 
     @CreationTimestamp
     @Column(updatable = false)

@@ -2,19 +2,23 @@ package com.yavimax.messenger.service;
 
 import com.yavimax.messenger.dto.ChatDto;
 import com.yavimax.messenger.dto.MessageDto;
-import com.yavimax.messenger.dto.UserSummaryDto;
 import com.yavimax.messenger.entity.Chat;
 import com.yavimax.messenger.entity.ChatMember;
 import com.yavimax.messenger.entity.ChatMemberId;
 import com.yavimax.messenger.entity.ChatType;
+import com.yavimax.messenger.entity.MemberRole;
 import com.yavimax.messenger.entity.Message;
 import com.yavimax.messenger.entity.MessageType;
 import com.yavimax.messenger.entity.User;
 import com.yavimax.messenger.repository.ChatMemberRepository;
 import com.yavimax.messenger.repository.ChatRepository;
 import com.yavimax.messenger.repository.MessageRepository;
+import com.yavimax.messenger.repository.UserRepository;
+import com.yavimax.messenger.websocket.ChatMessageHandler;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,45 +30,70 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ChatService {
 
     private final ChatRepository chatRepository;
     private final ChatMemberRepository chatMemberRepository;
     private final MessageRepository messageRepository;
+    private final UserRepository userRepository;
     private final UserService userService;
+    private final SimpMessagingTemplate messagingTemplate;
 
     @Transactional(readOnly = true)
     public List<ChatDto> getUserChats(Long userId) {
         return chatMemberRepository.findByUserIdWithDetails(userId).stream()
-                .map(this::toChatDto)
+                .map(member -> toChatDto(userId, member.getChat()))
                 .collect(Collectors.toList());
     }
 
     @Transactional
     public ChatDto createPrivateChat(Long userId1, Long userId2) {
-        Optional<Chat> existingChat = chatRepository.findPrivateChatBetweenUsers(userId1, userId2);
+        Optional<Chat> existingChat;
+        if (userId1.equals(userId2)) {
+            existingChat = chatRepository.findByUserId(userId1).stream()
+                    .filter(c -> c.getType() == ChatType.PRIVATE)
+                    .filter(c -> {
+                        List<ChatMember> members = chatMemberRepository.findByChatId(c.getId());
+                        return members.size() == 1 && members.get(0).getUser().getId().equals(userId1);
+                    })
+                    .findFirst();
+        } else {
+            existingChat = chatRepository.findPrivateChatBetweenUsers(userId1, userId2);
+        }
+
         if (existingChat.isPresent()) {
-            return toChatDto(existingChat.get());
+            return toChatDto(userId1, existingChat.get());
         }
 
         Chat chat = Chat.builder()
                 .type(ChatType.PRIVATE)
+                .createdAt(LocalDateTime.now())
                 .build();
         chat = chatRepository.save(chat);
 
-        chatMemberRepository.save(ChatMember.builder()
-                .id(new ChatMemberId(chat.getId(), userId1))
-                .chat(chat)
-                .user(User.builder().id(userId1).build())
-                .build());
+        User user1 = userRepository.findById(userId1).orElseThrow(() -> new RuntimeException("User 1 not found"));
+        
+        ChatMember member1 = new ChatMember();
+        member1.setId(new ChatMemberId(chat.getId(), userId1));
+        member1.setChat(chat);
+        member1.setUser(user1);
+        member1.setRole(MemberRole.MEMBER);
+        member1.setJoinedAt(LocalDateTime.now());
+        chatMemberRepository.save(member1);
 
-        chatMemberRepository.save(ChatMember.builder()
-                .id(new ChatMemberId(chat.getId(), userId2))
-                .chat(chat)
-                .user(User.builder().id(userId2).build())
-                .build());
+        if (!userId1.equals(userId2)) {
+            User user2 = userRepository.findById(userId2).orElseThrow(() -> new RuntimeException("User 2 not found"));
+            ChatMember member2 = new ChatMember();
+            member2.setId(new ChatMemberId(chat.getId(), userId2));
+            member2.setChat(chat);
+            member2.setUser(user2);
+            member2.setRole(MemberRole.MEMBER);
+            member2.setJoinedAt(LocalDateTime.now());
+            chatMemberRepository.save(member2);
+        }
 
-        return toChatDto(chat);
+        return toChatDto(userId1, chat);
     }
 
     @Transactional(readOnly = true)
@@ -79,70 +108,98 @@ public class ChatService {
         Chat chat = chatRepository.findById(chatId)
                 .orElseThrow(() -> new RuntimeException("Chat not found"));
 
+        User sender = userRepository.findById(senderId).orElseThrow(() -> new RuntimeException("Sender not found"));
+
         Message message = Message.builder()
                 .chat(chat)
-                .sender(User.builder().id(senderId).build())
+                .sender(sender)
                 .text(text)
                 .type(type)
+                .isRead(false)
+                .createdAt(LocalDateTime.now())
                 .build();
 
         Message saved = messageRepository.save(message);
-        return toMessageDto(saved);
+        MessageDto dto = toMessageDto(saved);
+
+        // Broadcast message via WebSocket
+        ChatMessageHandler.WebSocketMessage<MessageDto> wsMessage = new ChatMessageHandler.WebSocketMessage<>(
+                "message.created",
+                dto,
+                dto.getTimestamp()
+        );
+        messagingTemplate.convertAndSend("/topic/chats." + chatId, wsMessage);
+        
+        return dto;
     }
 
-    private ChatDto toChatDto(ChatMember member) {
-        Chat chat = member.getChat();
+    @Transactional
+    public void markAsRead(Long chatId, Long userId) {
+        log.info("Marking messages in chat {} as read by user {}", chatId, userId);
+        messageRepository.markMessagesAsRead(chatId, userId);
+    }
+
+    private ChatDto toChatDto(Long currentUserId, Chat chat) {
+        if (chat == null) return null;
+        
         ChatDto.ChatDtoBuilder builder = ChatDto.builder()
                 .id(chat.getId())
-                .type(chat.getType().name().toLowerCase())
-                .title(chat.getTitle())
+                .type(chat.getType() != null ? chat.getType().name().toLowerCase() : "private")
+                .title(chat.getTitle() != null ? chat.getTitle() : "")
                 .avatarUrl(chat.getAvatarUrl())
-                .isPinned(false);
+                .isPinned(false)
+                .unreadCount(0)
+                .timestamp(formatTimestamp(chat.getCreatedAt() != null ? chat.getCreatedAt() : LocalDateTime.now()))
+                .membersCount(0)
+                .lastMessage("");
+
+        List<ChatMember> members = chatMemberRepository.findByChatId(chat.getId());
+        builder.membersCount(members.size());
 
         if (chat.getType() == ChatType.PRIVATE) {
-            List<User> members = chatMemberRepository.findByChatId(chat.getId()).stream()
-                    .map(m -> m.getUser())
-                    .filter(u -> !u.getId().equals(userService.getCurrentUserId()))
-                    .collect(Collectors.toList());
-            
-            if (!members.isEmpty()) {
-                User otherUser = members.get(0);
+            User otherUser = null;
+            if (members.size() == 1) {
+                otherUser = members.get(0).getUser();
+            } else if (!members.isEmpty()) {
+                otherUser = members.stream()
+                        .map(ChatMember::getUser)
+                        .filter(u -> !u.getId().equals(currentUserId))
+                        .findFirst()
+                        .orElse(members.get(0).getUser());
+            }
+
+            if (otherUser != null) {
                 builder.user(userService.toUserSummary(otherUser));
-                builder.title(otherUser.getName());
-                builder.avatarUrl(otherUser.getAvatarUrl());
+                if (chat.getTitle() == null || chat.getTitle().isEmpty()) builder.title(otherUser.getName());
+                if (chat.getAvatarUrl() == null) builder.avatarUrl(otherUser.getAvatarUrl());
             }
         }
 
-        Optional<Message> lastMessage = messageRepository.findLastMessageByChatId(chat.getId());
-        lastMessage.ifPresent(msg -> {
-            builder.lastMessage(msg.getText());
-            builder.timestamp(formatTimestamp(msg.getCreatedAt()));
-        });
+        try {
+            messageRepository.findFirstByChatIdOrderByCreatedAtDesc(chat.getId()).ifPresent(msg -> {
+                builder.lastMessage(msg.getText() != null ? msg.getText() : "");
+                builder.timestamp(formatTimestamp(msg.getCreatedAt()));
+            });
 
-        builder.unreadCount(messageRepository.countUnreadMessages(chat.getId(), userService.getCurrentUserId()));
+            Long unreadCount = messageRepository.countUnreadMessages(chat.getId(), currentUserId);
+            builder.unreadCount(unreadCount != null ? unreadCount.intValue() : 0);
+        } catch (Exception e) {
+            log.warn("Error fetching last message or unread count for chat {}: {}", chat.getId(), e.getMessage());
+        }
 
         return builder.build();
     }
 
-    private ChatDto toChatDto(Chat chat) {
-        return ChatDto.builder()
-                .id(chat.getId())
-                .type(chat.getType().name().toLowerCase())
-                .title(chat.getTitle())
-                .avatarUrl(chat.getAvatarUrl())
-                .timestamp(formatTimestamp(chat.getCreatedAt()))
-                .build();
-    }
-
     private MessageDto toMessageDto(Message message) {
+        if (message == null) return null;
         return MessageDto.builder()
                 .id(message.getId())
                 .chatId(message.getChat().getId())
                 .sender(userService.getUserSummary(message.getSender().getId()))
-                .text(message.getText())
-                .type(message.getType().name().toLowerCase())
+                .text(message.getText() != null ? message.getText() : "")
+                .type(message.getType() != null ? message.getType().name().toLowerCase() : "text")
                 .mediaUrl(message.getMediaUrl())
-                .isRead(message.getIsRead())
+                .isRead(Boolean.TRUE.equals(message.getIsRead()))
                 .createdAt(message.getCreatedAt())
                 .timestamp(formatTimestamp(message.getCreatedAt()))
                 .build();

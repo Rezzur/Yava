@@ -15,9 +15,12 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
 
     List<Message> findByChatIdOrderByCreatedAtDesc(Long chatId, Pageable pageable);
 
-    @Query("SELECT m FROM Message m WHERE m.chat.id = :chatId ORDER BY m.createdAt DESC LIMIT 1")
-    Optional<Message> findLastMessageByChatId(@Param("chatId") Long chatId);
+    Optional<Message> findFirstByChatIdOrderByCreatedAtDesc(Long chatId);
 
     @Query("SELECT COUNT(m) FROM Message m WHERE m.chat.id = :chatId AND m.sender.id != :userId AND m.isRead = false")
-    int countUnreadMessages(@Param("chatId") Long chatId, @Param("userId") Long userId);
+    Long countUnreadMessages(@Param("chatId") Long chatId, @Param("userId") Long userId);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("UPDATE Message m SET m.isRead = true WHERE m.chat.id = :chatId AND m.sender.id != :userId AND m.isRead = false")
+    void markMessagesAsRead(@Param("chatId") Long chatId, @Param("userId") Long userId);
 }

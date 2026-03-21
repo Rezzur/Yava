@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,60 +18,67 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/chats")
 @RequiredArgsConstructor
-@Tag(name = "Chats", description = "Chat management endpoints")
+@Tag(name = "Chat", description = "Chat management endpoints")
 @SecurityRequirement(name = "bearerAuth")
+@Slf4j
 public class ChatController {
 
     private final ChatService chatService;
     private final UserService userService;
 
     @GetMapping
-    @Operation(summary = "Get user chats", description = "Returns all chats for the current user")
-    public ResponseEntity<List<ChatDto>> getUserChats() {
-        Long userId = userService.getCurrentUserId();
-        return ResponseEntity.ok(chatService.getUserChats(userId));
+    @Operation(summary = "Get user chats", description = "Returns list of chats for the current user")
+    public ResponseEntity<List<ChatDto>> getChats() {
+        Long currentUserId = userService.getCurrentUserId();
+        return ResponseEntity.ok(chatService.getUserChats(currentUserId));
     }
 
     @PostMapping
-    @Operation(summary = "Create private chat", description = "Creates a new private chat with a user")
-    public ResponseEntity<ChatDto> createChat(@RequestParam Long userId) {
-        Long currentUserId = userService.getCurrentUserId();
-        return ResponseEntity.ok(chatService.createPrivateChat(currentUserId, userId));
-    }
-
-    @GetMapping("/{chatId}")
-    @Operation(summary = "Get chat by ID")
-    public ResponseEntity<ChatDto> getChat(@PathVariable Long chatId) {
-        List<ChatDto> chats = chatService.getUserChats(userService.getCurrentUserId());
-        return ResponseEntity.ok(chats.stream()
-                .filter(c -> c.getId().equals(chatId))
-                .findFirst()
-                .orElseThrow(() -> new RuntimeException("Chat not found")));
+    @Operation(summary = "Create private chat", description = "Creates a new private chat with specified user or returns existing one")
+    public ResponseEntity<?> createChat(@RequestParam Long userId) {
+        log.info("REST request to create chat with user: {}", userId);
+        try {
+            Long currentUserId = userService.getCurrentUserId();
+            ChatDto chat = chatService.createPrivateChat(currentUserId, userId);
+            return ResponseEntity.ok(chat);
+        } catch (Exception e) {
+            log.error("Failed to create chat: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body("Error: " + e.getMessage());
+        }
     }
 
     @GetMapping("/{chatId}/messages")
-    @Operation(summary = "Get chat messages", description = "Returns paginated messages for a chat")
-    public ResponseEntity<List<MessageDto>> getChatMessages(
+    @Operation(summary = "Get chat messages", description = "Returns paginated messages for a specific chat")
+    public ResponseEntity<List<MessageDto>> getMessages(
             @PathVariable Long chatId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size
-    ) {
+            @RequestParam(defaultValue = "50") int size) {
         return ResponseEntity.ok(chatService.getChatMessages(chatId, page, size));
     }
 
     @PostMapping("/{chatId}/messages")
-    @Operation(summary = "Send message", description = "Sends a text message to the chat")
+    @Operation(summary = "Send message", description = "Sends a new message to a specific chat")
     public ResponseEntity<MessageDto> sendMessage(
             @PathVariable Long chatId,
-            @RequestBody SendMessageRequest request
-    ) {
-        Long senderId = userService.getCurrentUserId();
-        MessageType type = request.getType() != null ? 
-                MessageType.valueOf(request.getType().toUpperCase()) : MessageType.TEXT;
-        return ResponseEntity.ok(chatService.sendMessage(chatId, senderId, request.getText(), type));
+            @RequestBody MessageRequest request) {
+        Long currentUserId = userService.getCurrentUserId();
+        return ResponseEntity.ok(chatService.sendMessage(
+                chatId,
+                currentUserId,
+                request.getText(),
+                MessageType.valueOf(request.getType().toUpperCase())
+        ));
     }
 
-    public static class SendMessageRequest {
+    @PostMapping("/{chatId}/read")
+    @Operation(summary = "Mark as read", description = "Marks all messages in chat as read for the current user")
+    public ResponseEntity<Void> markAsRead(@PathVariable Long chatId) {
+        Long currentUserId = userService.getCurrentUserId();
+        chatService.markAsRead(chatId, currentUserId);
+        return ResponseEntity.ok().build();
+    }
+
+    public static class MessageRequest {
         private String text;
         private String type;
 

@@ -2,6 +2,7 @@ import { useParams } from "react-router-dom";
 import { useChatStore } from "@/entities/chat/model/chatStore";
 import { useUser } from "@/entities/user/model/useUser";
 import { useWebSocket } from "@/shared/api/websocket";
+import { Avatar } from "@/shared/ui/Avatar";
 import { Search, Phone, MoreVertical, Paperclip, Smile, Mic, Send, Check, CheckCheck, FileText, Image as ImageIcon, User as UserIcon, ChevronDown, Reply, Copy, Trash2, X, PhoneOff, MicOff, Video, Bell, Image, Link as LinkIcon, File } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { clsx } from "clsx";
@@ -23,15 +24,16 @@ export function ChatArea() {
   const emojiMenuRef = useRef<HTMLDivElement>(null);
 
   const { user: currentUser } = useUser();
-  const { chats, messages, fetchMessages, sendMessage, isLoading, isMessagesLoading } = useChatStore();
+  const { chats, messages, fetchMessages, sendMessage, markAsRead, isLoading, isMessagesLoading } = useChatStore();
   const { subscribeToChat } = useWebSocket();
 
   const chat = chats.find(c => c.id === Number(chatId));
 
-  // Fetch messages when chat changes
+  // Fetch messages and mark as read when chat changes
   useEffect(() => {
     if (chatId) {
       fetchMessages(Number(chatId));
+      markAsRead(Number(chatId));
     }
   }, [chatId]);
 
@@ -70,8 +72,6 @@ export function ChatArea() {
   };
 
   const handleSendFile = async (type: 'IMAGE' | 'DOCUMENT') => {
-    // For now, since we don't have a real upload endpoint, 
-    // we'll just send a text message indicating the type
     if (!chatId) return;
     const text = type === 'IMAGE' ? "📷 Фотография" : "📄 Документ";
     await sendMessage(Number(chatId), text);
@@ -91,7 +91,7 @@ export function ChatArea() {
   );
 
   const title = chat?.title || (chat?.user && chat.user.name) || "Чат";
-  const avatar = chat?.avatarUrl || (chat?.user && chat.user.avatarUrl) || `https://i.pravatar.cc/150?u=${chatId}`;
+  const avatar = chat?.avatarUrl || (chat?.user && chat.user.avatarUrl);
   const status = chat?.type === 'private' ? (chat?.user?.status || 'недавно') : `${chat?.membersCount || 0} участников`;
 
   const handleEmojiClick = (emoji: string) => {
@@ -103,6 +103,7 @@ export function ChatArea() {
     <div className="flex-1 flex h-full relative z-10 bg-[#e4ebf0] dark:bg-slate-950 overflow-hidden">
       
       <div className="flex-1 flex flex-col h-full relative">
+        {/* Dynamic Background Pattern */}
         <div 
           className="absolute inset-0 z-0 opacity-[0.4] pointer-events-none dark:opacity-[0.1]"
           style={{
@@ -115,7 +116,7 @@ export function ChatArea() {
           {!isSearchOpen ? (
             <>
               <div className="flex items-center cursor-pointer flex-1" onClick={() => setIsInfoOpen(!isInfoOpen)}>
-                <img src={avatar} className="w-10 h-10 rounded-full object-cover mr-4" alt={title} />
+                <Avatar src={avatar} name={title} size="sm" className="mr-4" />
                 <div>
                   <div className="font-semibold text-[16px] dark:text-slate-100">{title}</div>
                   <div className="text-sm text-slate-500 dark:text-slate-400">{status}</div>
@@ -144,7 +145,7 @@ export function ChatArea() {
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 z-10 flex flex-col gap-2 relative custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-4 z-10 flex flex-col gap-2 relative custom-scrollbar bg-slate-50/30 dark:bg-transparent">
           {isMessagesLoading && messages.length === 0 && (
             <div className="flex-1 flex items-center justify-center">
               <div className="w-8 h-8 border-4 border-[#3390ec] border-t-transparent rounded-full animate-spin"></div>
@@ -153,72 +154,74 @@ export function ChatArea() {
           
           {messages.map((msg) => {
             const isMenuOpen = activeMessageId === msg.id;
-            const isMe = msg.sender.id === currentUser?.id || msg.isMe;
+            const isMe = String(msg.sender.id) === String(currentUser?.id) || msg.isMe;
             
             return (
-              <div key={msg.id} className={clsx("flex max-w-[70%]", isMe ? "ml-auto" : "mr-auto")}>
-                {!isMe && chat?.type === 'group' && (
-                  <img src={msg.sender.avatarUrl || "https://i.pravatar.cc/150?u=" + msg.sender.id} className="w-9 h-9 rounded-full mr-2 self-end mb-1" alt="user" />
-                )}
-                
-                <div 
-                  className={clsx(
-                    "rounded-2xl px-3 py-2 text-[15px] shadow-sm relative group",
-                    isMe 
-                      ? "bg-[#eeffde] dark:bg-[#2b5278] text-black dark:text-white rounded-br-none" 
-                      : "bg-white dark:bg-[#182533] text-black dark:text-white rounded-bl-none"
-                  )}
-                >
+              <div key={msg.id} className={clsx("flex w-full mb-1", isMe ? "justify-end" : "justify-start")}>
+                <div className={clsx("flex max-w-[75%]", isMe ? "flex-row-reverse" : "flex-row")}>
                   {!isMe && chat?.type === 'group' && (
-                    <div className="text-[#3390ec] text-sm font-semibold mb-1">
-                      {msg.sender.name}
-                    </div>
+                    <Avatar src={msg.sender.avatarUrl} name={msg.sender.name} size="sm" className="mr-2 self-end mb-1" />
                   )}
                   
-                  <div className="pr-12 leading-relaxed whitespace-pre-wrap">
-                    {msg.text}
-                  </div>
-                  
-                  <div className="absolute right-2 bottom-1.5 flex items-center gap-1 text-xs text-slate-400">
-                    {msg.timestamp || new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    {isMe && (
-                      <span className="text-[#4caf50]">
-                        {msg.isRead ? <CheckCheck className="w-4 h-4" /> : <Check className="w-4 h-4" />}
-                      </span>
-                    )}
-                  </div>
-
-                  <button 
-                    onClick={() => setActiveMessageId(isMenuOpen ? null : msg.id)}
+                  <div 
                     className={clsx(
-                      "absolute top-1 -right-8 p-1 rounded-full bg-black/5 dark:bg-white/10 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-all",
-                      isMenuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-                      isMe ? "-left-8 right-auto" : ""
+                      "rounded-2xl px-3 py-2 text-[15px] shadow-sm relative group min-w-[80px]",
+                      isMe 
+                        ? "bg-[#eeffde] dark:bg-[#2b5278] text-black dark:text-white rounded-br-none ml-2" 
+                        : "bg-white dark:bg-[#182533] text-black dark:text-white rounded-bl-none mr-2"
                     )}
                   >
-                    <ChevronDown className="w-4 h-4" />
-                  </button>
+                    {!isMe && chat?.type === 'group' && (
+                      <div className="text-[#3390ec] text-sm font-semibold mb-1">
+                        {msg.sender.name}
+                      </div>
+                    )}
+                    
+                    <div className="pr-12 leading-relaxed whitespace-pre-wrap break-words">
+                      {msg.text}
+                    </div>
+                    
+                    <div className="absolute right-2 bottom-1.5 flex items-center gap-1 text-xs text-slate-400">
+                      {msg.timestamp || new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {isMe && (
+                        <span className="text-[#4caf50]">
+                          {msg.isRead ? <CheckCheck className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+                        </span>
+                      )}
+                    </div>
 
-                  {isMenuOpen && (
-                    <div 
-                      ref={messageMenuRef}
+                    <button 
+                      onClick={() => setActiveMessageId(isMenuOpen ? null : msg.id)}
                       className={clsx(
-                        "absolute top-8 w-44 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-100 dark:border-slate-800 py-1 z-50 animate-in fade-in zoom-in-95 duration-150",
-                        isMe ? "right-full mr-2" : "left-full ml-2"
+                        "absolute top-1 p-1 rounded-full bg-black/5 dark:bg-white/10 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-all",
+                        isMenuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                        isMe ? "-left-8" : "-right-8"
                       )}
                     >
-                      <button className="w-full flex items-center px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-slate-700 dark:text-slate-200">
-                        <Reply className="w-4 h-4 mr-3" /> <span className="text-[14px]">Ответить</span>
-                      </button>
-                      <button className="w-full flex items-center px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-slate-700 dark:text-slate-200">
-                        <Copy className="w-4 h-4 mr-3" /> <span className="text-[14px]">Копировать</span>
-                      </button>
-                      <div className="h-[1px] bg-slate-100 dark:bg-slate-800 my-1"></div>
-                      <button className="w-full flex items-center px-4 py-2 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-red-500">
-                        <Trash2 className="w-4 h-4 mr-3" /> <span className="text-[14px]">Удалить</span>
-                      </button>
-                    </div>
-                  )}
+                      <ChevronDown className="w-4 h-4" />
+                    </button>
+
+                    {isMenuOpen && (
+                      <div 
+                        ref={messageMenuRef}
+                        className={clsx(
+                          "absolute top-8 w-44 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-100 dark:border-slate-800 py-1 z-50 animate-in fade-in zoom-in-95 duration-150",
+                          isMe ? "right-0" : "left-0"
+                        )}
+                      >
+                        <button className="w-full flex items-center px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-slate-700 dark:text-slate-200">
+                          <Reply className="w-4 h-4 mr-3" /> <span className="text-[14px]">Ответить</span>
+                        </button>
+                        <button className="w-full flex items-center px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-slate-700 dark:text-slate-200">
+                          <Copy className="w-4 h-4 mr-3" /> <span className="text-[14px]">Копировать</span>
+                        </button>
+                        <div className="h-[1px] bg-slate-100 dark:bg-slate-800 my-1"></div>
+                        <button className="w-full flex items-center px-4 py-2 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-red-500">
+                          <Trash2 className="w-4 h-4 mr-3" /> <span className="text-[14px]">Удалить</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -328,7 +331,7 @@ export function ChatArea() {
           
           <div className="flex-1 overflow-y-auto custom-scrollbar">
             <div className="p-6 flex flex-col items-center border-b border-slate-100 dark:border-slate-800">
-              <img src={avatar} className="w-32 h-32 rounded-full object-cover mb-4" alt={title} />
+              <Avatar src={avatar} name={title} size="xl" className="mb-4" />
               <h2 className="text-xl font-bold dark:text-slate-100 text-center">{title}</h2>
               <div className="text-slate-500 dark:text-slate-400 mt-1">{status}</div>
             </div>
