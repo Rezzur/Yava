@@ -3,19 +3,20 @@ import { clsx } from "clsx";
 interface AvatarProps {
   src?: string;
   name?: string;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
 }
 
 export function Avatar({ src, name, size = 'md', className }: AvatarProps) {
   const sizeClasses = {
-    sm: "w-10 h-10 text-sm",
-    md: "w-14 h-14 text-lg",
-    lg: "w-24 h-24 text-2xl",
-    xl: "w-32 h-32 text-4xl"
+    xs: "w-8 h-8 text-[10px]",
+    sm: "w-10 h-10 text-xs",
+    md: "w-12 h-12 text-sm",
+    lg: "w-16 h-16 text-lg",
+    xl: "w-24 h-24 text-2xl"
   };
 
-  if (src) {
+  if (src && src !== 'null' && src !== '') {
     return (
       <img 
         src={src} 
@@ -26,14 +27,13 @@ export function Avatar({ src, name, size = 'md', className }: AvatarProps) {
   }
 
   const initials = name
-    ? name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
+    ? name.split(' ').filter(x => x).map(n => n[0]).join('').substring(0, 2).toUpperCase()
     : '?';
 
-  // Generate a consistent color based on the name
+  // More professional color palette (slate/blue tones)
   const colors = [
-    'bg-red-500', 'bg-green-500', 'bg-blue-500', 
-    'bg-yellow-500', 'bg-purple-500', 'bg-pink-500', 
-    'bg-indigo-500', 'bg-teal-500', 'bg-orange-500'
+    'bg-slate-400', 'bg-blue-400', 'bg-indigo-400', 
+    'bg-emerald-400', 'bg-cyan-400', 'bg-sky-400'
   ];
   
   const colorIndex = name 
@@ -42,7 +42,7 @@ export function Avatar({ src, name, size = 'md', className }: AvatarProps) {
 
   return (
     <div className={clsx(
-      "rounded-full flex items-center justify-center text-white font-bold shrink-0", 
+      "rounded-full flex items-center justify-center text-white font-semibold shrink-0 uppercase", 
       colors[colorIndex],
       sizeClasses[size],
       className

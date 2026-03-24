@@ -1,4 +1,4 @@
-import { Client } from '@stomp/stompjs';
+import { Client, StompSubscription } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 import { useChatStore } from '@/entities/chat/model/chatStore';
 import { useEffect, useRef } from 'react';
@@ -6,8 +6,9 @@ import { useEffect, useRef } from 'react';
 const SOCKET_URL = 'http://localhost:8080/ws';
 
 export function useWebSocket() {
-  const { addMessage, updateChatLastMessage } = useChatStore();
+  const { addMessage } = useChatStore();
   const clientRef = useRef<Client | null>(null);
+  const subscriptionsRef = useRef<Map<number, StompSubscription>>(new Map());
 
   useEffect(() => {
     const token = localStorage.getItem('yavimax_token');
@@ -18,46 +19,71 @@ export function useWebSocket() {
       connectHeaders: {
         Authorization: `Bearer ${token}`,
       },
-      debug: (str) => {
-        console.log(str);
-      },
       reconnectDelay: 5000,
       heartbeatIncoming: 4000,
       heartbeatOutgoing: 4000,
     });
 
-    client.onConnect = (frame) => {
-      console.log('Connected to WebSocket');
-      
-      // Subscribe to user personal notifications/messages if needed
-      // For now, subscriptions are usually per-chat, but we can subscribe to all user chats
-      // Or a general topic for new chats
-    };
-
-    client.onStompError = (frame) => {
-      console.error('Broker reported error: ' + frame.headers['message']);
-      console.error('Additional details: ' + frame.body);
+    client.onConnect = () => {
+      console.log('WebSocket Connected');
+      // If we had a pending subscription, we could do it here
     };
 
     client.activate();
     clientRef.current = client;
 
     return () => {
+      subscriptionsRef.current.forEach(sub => sub.unsubscribe());
       client.deactivate();
     };
   }, []);
 
   const subscribeToChat = (chatId: number) => {
-    if (!clientRef.current || !clientRef.current.connected) return;
+    const client = clientRef.current;
+    
+    // Logic to handle subscription even if not connected yet
+    const performSubscribe = () => {
+      if (subscriptionsRef.current.has(chatId)) return;
 
-    return clientRef.current.subscribe(`/topic/chats.${chatId}`, (message) => {
-      const data = JSON.parse(message.body);
-      if (data.type === 'message.created') {
-        const msg = data.payload;
-        addMessage(msg);
-        updateChatLastMessage(chatId, msg.text, msg.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      console.log(`Subscribing to chat ${chatId}`);
+      const sub = client!.subscribe(`/topic/chats.${chatId}`, (message) => {
+        const data = JSON.parse(message.body);
+        if (data.type === 'message.created') {
+          addMessage(data.payload);
+        }
+      });
+      subscriptionsRef.current.set(chatId, sub);
+    };
+
+    if (client && client.connected) {
+      performSubscribe();
+    } else if (client) {
+      // Polling or waiting for connection
+      const interval = setInterval(() => {
+        if (client.connected) {
+          performSubscribe();
+          clearInterval(interval);
+        }
+      }, 500);
+      return { unsubscribe: () => {
+        clearInterval(interval);
+        const sub = subscriptionsRef.current.get(chatId);
+        if (sub) {
+          sub.unsubscribe();
+          subscriptionsRef.current.delete(chatId);
+        }
+      }};
+    }
+
+    return {
+      unsubscribe: () => {
+        const sub = subscriptionsRef.current.get(chatId);
+        if (sub) {
+          sub.unsubscribe();
+          subscriptionsRef.current.delete(chatId);
+        }
       }
-    });
+    };
   };
 
   return { subscribeToChat };

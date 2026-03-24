@@ -12,6 +12,7 @@ export function ChatArea() {
   const [inputText, setInputText] = useState("");
   const [isAttachOpen, setIsAttachOpen] = useState(false);
   const [activeMessageId, setActiveMessageId] = useState<number | null>(null);
+  const [isSending, setIsSending] = useState(false);
   
   const [isCallOpen, setIsCallOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -24,20 +25,24 @@ export function ChatArea() {
   const emojiMenuRef = useRef<HTMLDivElement>(null);
 
   const { user: currentUser } = useUser();
-  const { chats, messages, fetchMessages, sendMessage, markAsRead, isLoading, isMessagesLoading } = useChatStore();
+  const { chats, messages, fetchMessages, sendMessage, markAsRead, setActiveChatId, isLoading } = useChatStore();
   const { subscribeToChat } = useWebSocket();
 
   const chat = chats.find(c => c.id === Number(chatId));
 
-  // Fetch messages and mark as read when chat changes
+  // Handle chat change
   useEffect(() => {
     if (chatId) {
-      fetchMessages(Number(chatId));
-      markAsRead(Number(chatId));
+      const id = Number(chatId);
+      setActiveChatId(id);
+      fetchMessages(id);
+      markAsRead(id);
+    } else {
+      setActiveChatId(null);
     }
   }, [chatId]);
 
-  // Subscribe to WebSocket for real-time messages
+  // Subscribe to WebSocket
   useEffect(() => {
     if (chatId) {
       const subscription = subscribeToChat(Number(chatId));
@@ -66,16 +71,27 @@ export function ChatArea() {
   }, []);
 
   const handleSendMessage = async () => {
-    if (!inputText.trim() || !chatId) return;
-    await sendMessage(Number(chatId), inputText.trim());
-    setInputText("");
+    if (!inputText.trim() || !chatId || isSending) return;
+    
+    setIsSending(true);
+    try {
+      await sendMessage(Number(chatId), inputText.trim());
+      setInputText("");
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleSendFile = async (type: 'IMAGE' | 'DOCUMENT') => {
-    if (!chatId) return;
+    if (!chatId || isSending) return;
     const text = type === 'IMAGE' ? "📷 Фотография" : "📄 Документ";
-    await sendMessage(Number(chatId), text);
-    setIsAttachOpen(false);
+    setIsSending(true);
+    try {
+      await sendMessage(Number(chatId), text);
+      setIsAttachOpen(false);
+    } finally {
+      setIsSending(false);
+    }
   };
 
   if (!chatId) return (
@@ -103,7 +119,6 @@ export function ChatArea() {
     <div className="flex-1 flex h-full relative z-10 bg-[#e4ebf0] dark:bg-slate-950 overflow-hidden">
       
       <div className="flex-1 flex flex-col h-full relative">
-        {/* Dynamic Background Pattern */}
         <div 
           className="absolute inset-0 z-0 opacity-[0.4] pointer-events-none dark:opacity-[0.1]"
           style={{
@@ -145,13 +160,7 @@ export function ChatArea() {
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 z-10 flex flex-col gap-2 relative custom-scrollbar bg-slate-50/30 dark:bg-transparent">
-          {isMessagesLoading && messages.length === 0 && (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="w-8 h-8 border-4 border-[#3390ec] border-t-transparent rounded-full animate-spin"></div>
-            </div>
-          )}
-          
+        <div className="flex-1 overflow-y-auto p-4 z-10 flex flex-col gap-2 relative custom-scrollbar bg-slate-50/10 dark:bg-transparent">
           {messages.map((msg) => {
             const isMenuOpen = activeMessageId === msg.id;
             const isMe = String(msg.sender.id) === String(currentUser?.id) || msg.isMe;
@@ -250,7 +259,7 @@ export function ChatArea() {
                     {['😀','😂','🥰','😎','🤔','👍','🔥','🎉','❤️','🙌','👀','😢'].map(emoji => (
                       <button 
                         key={emoji} 
-                        type="button"
+                        type="button" 
                         onClick={() => handleEmojiClick(emoji)}
                         className="text-xl hover:scale-125 transition-transform flex items-center justify-center h-8"
                       >
@@ -311,9 +320,17 @@ export function ChatArea() {
             </div>
             <button 
               type="submit"
-              className="w-12 h-12 rounded-full bg-[#3390ec] text-white flex items-center justify-center shadow-md hover:bg-[#2884e0] transition-all active:scale-95 shrink-0"
+              disabled={isSending}
+              className={clsx(
+                "w-12 h-12 rounded-full text-white flex items-center justify-center shadow-md transition-all active:scale-95 shrink-0",
+                inputText.trim() ? "bg-[#3390ec] hover:bg-[#2884e0]" : "bg-slate-400 cursor-default"
+              )}
             >
-              {inputText.trim() ? <Send className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+              {isSending ? (
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                inputText.trim() ? <Send className="w-6 h-6" /> : <Mic className="w-6 h-6" />
+              )}
             </button>
           </form>
         </div>

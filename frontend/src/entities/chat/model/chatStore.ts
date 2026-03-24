@@ -4,6 +4,7 @@ import { chatApi, userApi, type ChatDTO, type MessageDTO, type UserSummary } fro
 interface ChatState {
   chats: ChatDTO[];
   currentChat: ChatDTO | null;
+  activeChatId: number | null;
   messages: MessageDTO[];
   isLoading: boolean;
   isMessagesLoading: boolean;
@@ -12,6 +13,7 @@ interface ChatState {
   
   fetchChats: () => Promise<void>;
   setCurrentChat: (chat: ChatDTO | null) => void;
+  setActiveChatId: (id: number | null) => void;
   fetchMessages: (chatId: number) => Promise<void>;
   sendMessage: (chatId: number, text: string, type?: string) => Promise<void>;
   markAsRead: (chatId: number) => Promise<void>;
@@ -25,6 +27,7 @@ interface ChatState {
 export const useChatStore = create<ChatState>((set, get) => ({
   chats: [],
   currentChat: null,
+  activeChatId: null,
   messages: [],
   isLoading: false,
   isMessagesLoading: false,
@@ -42,18 +45,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  setCurrentChat: (chat) => set({ currentChat: chat, messages: [] }),
+  setCurrentChat: (chat) => set({ currentChat: chat }),
+  setActiveChatId: (id) => set({ activeChatId: id }),
 
   fetchMessages: async (chatId) => {
-    set({ isMessagesLoading: true });
+    set({ isMessagesLoading: true, activeChatId: chatId });
     try {
       console.log('Fetching messages for chat:', chatId);
       const response = await chatApi.getMessages(chatId);
-      // Backend returns messages in reverse chronological order (desc), so we reverse for display
       const msgs = Array.isArray(response.data) ? [...response.data].reverse() : [];
       set({ messages: msgs, isMessagesLoading: false });
       
-      // Auto mark as read when fetching messages
+      // Auto mark as read
       get().markAsRead(chatId);
     } catch (error) {
       console.error('Failed to fetch messages:', error);
@@ -66,8 +69,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const response = await chatApi.sendMessage(chatId, text, type);
       const state = get();
       
-      // Add message locally
-      set({ messages: [...state.messages, response.data] });
+      // Add message manually only if it hasn't been added by WebSocket yet
+      if (!state.messages.find(m => m.id === response.data.id)) {
+        set({ messages: [...state.messages, response.data] });
+      }
       get().updateChatLastMessage(chatId, text, response.data.timestamp);
     } catch (error) {
       console.error('Failed to send message:', error);
@@ -98,7 +103,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const response = await userApi.search(query);
       set({ searchResults: response.data, isSearching: false });
     } catch (error) {
-      console.error('Search failed:', error);
       set({ searchResults: [], isSearching: false });
     }
   },
@@ -117,16 +121,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   addMessage: (message) => {
     const state = get();
-    // Avoid duplicates
+    console.log('WS incoming message:', message);
+    
+    // 1. Update sidebar for this chat
+    get().updateChatLastMessage(message.chatId, message.text, message.timestamp);
+
+    // 2. If it's for another chat, increment unread count
+    if (state.activeChatId !== message.chatId) {
+      set({
+        chats: state.chats.map(chat =>
+          chat.id === message.chatId ? { ...chat, unreadCount: (chat.unreadCount || 0) + 1 } : chat
+        )
+      });
+      return;
+    }
+
+    // 3. If it's for current chat, add to list if not present
     if (!state.messages.find(m => m.id === message.id)) {
       set({ messages: [...state.messages, message] });
-      
-      // Update unread count if it's not the current chat
-      // or if it IS the current chat but window is not focused (simplified for now)
-      get().updateChatLastMessage(message.chatId, message.text, message.timestamp);
-      
-      // If message is from others and not in current chat, increment unread
-      // Note: in a real app we'd check if chat is active
+      // Since we are looking at it, mark as read on backend
+      chatApi.markAsRead(message.chatId);
     }
   },
 

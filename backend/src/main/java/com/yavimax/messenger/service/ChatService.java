@@ -2,6 +2,7 @@ package com.yavimax.messenger.service;
 
 import com.yavimax.messenger.dto.ChatDto;
 import com.yavimax.messenger.dto.MessageDto;
+import com.yavimax.messenger.dto.UserSummaryDto;
 import com.yavimax.messenger.entity.Chat;
 import com.yavimax.messenger.entity.ChatMember;
 import com.yavimax.messenger.entity.ChatMemberId;
@@ -49,51 +50,58 @@ public class ChatService {
 
     @Transactional
     public ChatDto createPrivateChat(Long userId1, Long userId2) {
-        Optional<Chat> existingChat;
-        if (userId1.equals(userId2)) {
-            existingChat = chatRepository.findByUserId(userId1).stream()
-                    .filter(c -> c.getType() == ChatType.PRIVATE)
-                    .filter(c -> {
-                        List<ChatMember> members = chatMemberRepository.findByChatId(c.getId());
-                        return members.size() == 1 && members.get(0).getUser().getId().equals(userId1);
-                    })
-                    .findFirst();
-        } else {
-            existingChat = chatRepository.findPrivateChatBetweenUsers(userId1, userId2);
+        log.info("Creating private chat between {} and {}", userId1, userId2);
+        try {
+            Optional<Chat> existingChat;
+            if (userId1.equals(userId2)) {
+                existingChat = chatRepository.findByUserId(userId1).stream()
+                        .filter(c -> c.getType() == ChatType.PRIVATE)
+                        .filter(c -> {
+                            List<ChatMember> members = chatMemberRepository.findByChatId(c.getId());
+                            return members.size() == 1 && members.get(0).getUser().getId().equals(userId1);
+                        })
+                        .findFirst();
+            } else {
+                existingChat = chatRepository.findPrivateChatBetweenUsers(userId1, userId2);
+            }
+
+            if (existingChat.isPresent()) {
+                log.info("Found existing chat: {}", existingChat.get().getId());
+                return toChatDto(userId1, existingChat.get());
+            }
+
+            Chat chat = Chat.builder()
+                    .type(ChatType.PRIVATE)
+                    .createdAt(LocalDateTime.now())
+                    .build();
+            chat = chatRepository.save(chat);
+
+            User user1 = userRepository.findById(userId1).orElseThrow(() -> new RuntimeException("User 1 not found"));
+            
+            ChatMember member1 = new ChatMember();
+            member1.setId(new ChatMemberId(chat.getId(), userId1));
+            member1.setChat(chat);
+            member1.setUser(user1);
+            member1.setRole(MemberRole.MEMBER);
+            member1.setJoinedAt(LocalDateTime.now());
+            chatMemberRepository.save(member1);
+
+            if (!userId1.equals(userId2)) {
+                User user2 = userRepository.findById(userId2).orElseThrow(() -> new RuntimeException("User 2 not found"));
+                ChatMember member2 = new ChatMember();
+                member2.setId(new ChatMemberId(chat.getId(), userId2));
+                member2.setChat(chat);
+                member2.setUser(user2);
+                member2.setRole(MemberRole.MEMBER);
+                member2.setJoinedAt(LocalDateTime.now());
+                chatMemberRepository.save(member2);
+            }
+
+            return toChatDto(userId1, chat);
+        } catch (Exception e) {
+            log.error("Error creating private chat: {}", e.getMessage(), e);
+            throw e;
         }
-
-        if (existingChat.isPresent()) {
-            return toChatDto(userId1, existingChat.get());
-        }
-
-        Chat chat = Chat.builder()
-                .type(ChatType.PRIVATE)
-                .createdAt(LocalDateTime.now())
-                .build();
-        chat = chatRepository.save(chat);
-
-        User user1 = userRepository.findById(userId1).orElseThrow(() -> new RuntimeException("User 1 not found"));
-        
-        ChatMember member1 = new ChatMember();
-        member1.setId(new ChatMemberId(chat.getId(), userId1));
-        member1.setChat(chat);
-        member1.setUser(user1);
-        member1.setRole(MemberRole.MEMBER);
-        member1.setJoinedAt(LocalDateTime.now());
-        chatMemberRepository.save(member1);
-
-        if (!userId1.equals(userId2)) {
-            User user2 = userRepository.findById(userId2).orElseThrow(() -> new RuntimeException("User 2 not found"));
-            ChatMember member2 = new ChatMember();
-            member2.setId(new ChatMemberId(chat.getId(), userId2));
-            member2.setChat(chat);
-            member2.setUser(user2);
-            member2.setRole(MemberRole.MEMBER);
-            member2.setJoinedAt(LocalDateTime.now());
-            chatMemberRepository.save(member2);
-        }
-
-        return toChatDto(userId1, chat);
     }
 
     @Transactional(readOnly = true)
@@ -122,12 +130,13 @@ public class ChatService {
         Message saved = messageRepository.save(message);
         MessageDto dto = toMessageDto(saved);
 
-        // Broadcast message via WebSocket
-        ChatMessageHandler.WebSocketMessage<MessageDto> wsMessage = new ChatMessageHandler.WebSocketMessage<>(
-                "message.created",
-                dto,
-                dto.getTimestamp()
-        );
+        // Broadcast message via WebSocket with correct types
+        ChatMessageHandler.WebSocketMessage<MessageDto> wsMessage = ChatMessageHandler.WebSocketMessage.<MessageDto>builder()
+                .type("message.created")
+                .payload(dto)
+                .timestamp(LocalDateTime.now())
+                .build();
+        
         messagingTemplate.convertAndSend("/topic/chats." + chatId, wsMessage);
         
         return dto;
