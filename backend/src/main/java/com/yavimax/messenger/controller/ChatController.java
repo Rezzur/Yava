@@ -66,7 +66,8 @@ public class ChatController {
                 chatId,
                 currentUserId,
                 request.getText(),
-                MessageType.valueOf(request.getType().toUpperCase())
+                MessageType.valueOf(request.getType().toUpperCase()),
+                request.getMediaUrl()
         ));
     }
 
@@ -81,10 +82,13 @@ public class ChatController {
     public static class MessageRequest {
         private String text;
         private String type;
+        private String mediaUrl;
 
         public String getText() { return text; }
         public void setText(String text) { this.text = text; }
         public String getType() { return type; }
         public void setType(String type) { this.type = type; }
+        public String getMediaUrl() { return mediaUrl; }
+        public void setMediaUrl(String mediaUrl) { this.mediaUrl = mediaUrl; }
     }
 }

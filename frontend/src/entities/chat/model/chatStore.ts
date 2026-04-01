@@ -15,7 +15,7 @@ interface ChatState {
   setCurrentChat: (chat: ChatDTO | null) => void;
   setActiveChatId: (id: number | null) => void;
   fetchMessages: (chatId: number) => Promise<void>;
-  sendMessage: (chatId: number, text: string, type?: string) => Promise<void>;
+  sendMessage: (chatId: number, text: string, type?: string, mediaUrl?: string) => Promise<void>;
   markAsRead: (chatId: number) => Promise<void>;
   searchUsers: (query: string) => Promise<void>;
   clearSearch: () => void;
@@ -64,9 +64,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  sendMessage: async (chatId, text, type = 'TEXT') => {
+  sendMessage: async (chatId, text, type = 'TEXT', mediaUrl) => {
     try {
-      const response = await chatApi.sendMessage(chatId, text, type);
+      const response = await chatApi.sendMessage(chatId, text, type, mediaUrl);
       const state = get();
       
       // Add message manually only if it hasn't been added by WebSocket yet

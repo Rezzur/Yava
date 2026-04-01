@@ -36,7 +36,7 @@ public class ChatMessageHandler {
                 return;
             }
 
-            MessageDto message = chatService.sendMessage(chatId, senderId, text.trim(), MessageType.TEXT);
+            MessageDto message = chatService.sendMessage(chatId, senderId, text.trim(), MessageType.TEXT, null);
 
             WebSocketMessage<Map<String, Object>> wsMessage = WebSocketMessage.<Map<String, Object>>builder()
                     .type("message.created")

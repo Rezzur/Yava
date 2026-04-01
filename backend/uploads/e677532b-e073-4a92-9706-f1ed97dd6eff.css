@@ -1,0 +1,91 @@
+/* Переменные для легкой смены цветовой схемы */
+:root {
+    --primary-dark: #2c3e50;
+    --accent-teal: #1abc9c;
+    --bg-light: #ecf0f1;
+    --text-main: #34495e;
+    --text-muted: #7f8c8d;
+    --white: #ffffff;
+    --font-main: 'Poppins', sans-serif;
+}
+
+body {
+    font-family: var(--font-main);
+    background-color: var(--bg-light);
+    color: var(--text-main);
+    margin: 0;
+    padding: 20px;
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 900px;
+    margin: 30px auto;
+    background: var(--white);
+    padding: 60px;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+}
+
+header {
+    text-align: center;
+    border-bottom: 3px solid var(--accent-teal);
+    padding-bottom: 30px;
+    margin-bottom: 40px;
+}
+
+h1 { margin: 0; color: var(--primary-dark); font-size: 3em; font-weight: 700; letter-spacing: -1px; }
+h2 { color: var(--accent-teal); font-size: 1.4em; text-transform: uppercase; font-weight: 600; margin-top: 0; display: flex; align-items: center; gap: 10px; }
+h3 { color: var(--primary-dark); font-size: 1.1em; font-weight: 600; margin-bottom: 5px; }
+
+.subtitle { font-size: 1.3em; color: var(--text-muted); font-weight: 300; margin: 15px 0; }
+.contacts { font-size: 0.95em; color: var(--text-muted); display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin-top: 10px; }
+.contacts span { display: flex; align-items: center; gap: 6px; }
+.contacts i { color: var(--accent-teal); font-size: 1.2em; }
+
+.resume-section {
+    margin-bottom: 30px;
+    padding: 20px;
+    border-radius: 8px;
+    transition: background 0.3s ease;
+}
+
+/* Эффект при наведении на раздел */
+.resume-section:hover {
+    background: rgba(26, 188, 156, 0.03);
+}
+
+.skills-grid { 
+    display: grid; 
+    grid-template-columns: repeat(2, 1fr); 
+    gap: 25px; 
+    margin-top: 20px;
+}
+
+.skill-category {
+    background: var(--bg-light);
+    padding: 15px;
+    border-radius: 6px;
+    border-left: 3px solid transparent;
+    transition: all 0.3s ease;
+}
+
+/* Эффект при наведении на категорию навыков */
+.skill-category:hover {
+    border-left-color: var(--accent-teal);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.skill-category ul { padding-left: 15px; margin: 5px 0; }
+.skill-category li { margin-bottom: 4px; font-size: 0.95em; }
+
+.edu-item p { margin: 5px 0; }
+.edu-details { color: var(--text-muted); font-size: 0.95em; font-weight: 300; }
+
+/* Адаптация для мобильных */
+@media (max-width: 768px) {
+    .container { padding: 30px; }
+    h1 { font-size: 2.2em; }
+    .contacts { gap: 10px; }
+    .skills-grid { grid-template-columns: 1fr; }
+}

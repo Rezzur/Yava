@@ -1,14 +1,16 @@
 import { Client, StompSubscription } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 import { useChatStore } from '@/entities/chat/model/chatStore';
+import { useUser } from '@/entities/user/model/useUser';
 import { useEffect, useRef } from 'react';
 
 const SOCKET_URL = 'http://localhost:8080/ws';
 
 export function useWebSocket() {
   const { addMessage } = useChatStore();
+  const { user: currentUser } = useUser();
   const clientRef = useRef<Client | null>(null);
-  const subscriptionsRef = useRef<Map<number, StompSubscription>>(new Map());
+  const subscriptionsRef = useRef<Map<string, StompSubscription>>(new Map());
 
   useEffect(() => {
     const token = localStorage.getItem('yavimax_token');
@@ -26,7 +28,16 @@ export function useWebSocket() {
 
     client.onConnect = () => {
       console.log('WebSocket Connected');
-      // If we had a pending subscription, we could do it here
+      
+      // Global subscription for all messages for this user
+      // This ensures sidebar updates even if chat is not active
+      client.subscribe('/user/queue/messages', (message) => {
+        const data = JSON.parse(message.body);
+        if (data.type === 'message.created') {
+          console.log('Global message received:', data.payload);
+          addMessage(data.payload);
+        }
+      });
     };
 
     client.activate();
@@ -40,25 +51,24 @@ export function useWebSocket() {
 
   const subscribeToChat = (chatId: number) => {
     const client = clientRef.current;
+    const topic = `/topic/chats.${chatId}`;
     
-    // Logic to handle subscription even if not connected yet
     const performSubscribe = () => {
-      if (subscriptionsRef.current.has(chatId)) return;
+      if (subscriptionsRef.current.has(topic)) return;
 
-      console.log(`Subscribing to chat ${chatId}`);
-      const sub = client!.subscribe(`/topic/chats.${chatId}`, (message) => {
+      console.log(`Subscribing to chat topic ${topic}`);
+      const sub = client!.subscribe(topic, (message) => {
         const data = JSON.parse(message.body);
         if (data.type === 'message.created') {
           addMessage(data.payload);
         }
       });
-      subscriptionsRef.current.set(chatId, sub);
+      subscriptionsRef.current.set(topic, sub);
     };
 
     if (client && client.connected) {
       performSubscribe();
     } else if (client) {
-      // Polling or waiting for connection
       const interval = setInterval(() => {
         if (client.connected) {
           performSubscribe();
@@ -67,20 +77,20 @@ export function useWebSocket() {
       }, 500);
       return { unsubscribe: () => {
         clearInterval(interval);
-        const sub = subscriptionsRef.current.get(chatId);
+        const sub = subscriptionsRef.current.get(topic);
         if (sub) {
           sub.unsubscribe();
-          subscriptionsRef.current.delete(chatId);
+          subscriptionsRef.current.delete(topic);
         }
       }};
     }
 
     return {
       unsubscribe: () => {
-        const sub = subscriptionsRef.current.get(chatId);
+        const sub = subscriptionsRef.current.get(topic);
         if (sub) {
           sub.unsubscribe();
-          subscriptionsRef.current.delete(chatId);
+          subscriptionsRef.current.delete(topic);
         }
       }
     };
