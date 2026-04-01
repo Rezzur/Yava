@@ -208,10 +208,12 @@ export function Sidebar() {
 
             {/* Drawer Menu Items */}
             <div className="flex-1 py-2 overflow-y-auto">
+              {/* 
               <DrawerItem icon={<Users />} text="Создать группу" onClick={handleCreateGroupOpen} />
               <DrawerItem icon={<Radio />} text="Создать канал" />
               <DrawerItem icon={<Phone />} text="Звонки" />
               <DrawerItem icon={<Bookmark />} text="Избранное" onClick={handleFavoritesClick} />
+              */}
               <DrawerItem 
                 icon={<Settings />} 
                 text="Настройки" 
@@ -292,84 +294,13 @@ export function Sidebar() {
         </div>
       )}
 
-      {/* Create Group Modal Overlay */}
+      {/* Create Group Modal Overlay - Currently Unused
       {isCreateGroupOpen && (
         <div className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-md overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
-            {/* Modal Header */}
-            <div className="px-6 py-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-800">
-              <h3 className="text-xl font-semibold text-slate-900 dark:text-white">Создать группу</h3>
-              <button 
-                onClick={() => setIsCreateGroupOpen(false)}
-                className="p-2 -mr-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            {/* Modal Content */}
-            <div className="p-6 flex flex-col gap-6">
-              {/* Group Name & Avatar */}
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-full bg-[#3390ec] text-white flex items-center justify-center shrink-0 cursor-pointer hover:bg-[#2884e0] transition-colors relative group overflow-hidden">
-                  <Camera className="w-6 h-6 z-10" />
-                </div>
-                <div className="flex-1 border-b-2 border-slate-200 dark:border-slate-700 focus-within:border-[#3390ec] dark:focus-within:border-[#3390ec] transition-colors pb-1">
-                  <input 
-                    type="text" 
-                    placeholder="Название группы" 
-                    value={groupName}
-                    onChange={(e) => setGroupName(e.target.value)}
-                    className="w-full bg-transparent border-none outline-none text-[16px] text-slate-900 dark:text-slate-100 placeholder-slate-400"
-                    autoFocus
-                  />
-                </div>
-              </div>
-
-              {/* Members Selection */}
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-medium text-[#3390ec]">Кого добавить?</label>
-                <div className="max-h-48 overflow-y-auto custom-scrollbar border border-slate-100 dark:border-slate-800 rounded-xl p-2">
-                  {chats.filter(c => c.type === 'private').map((chat, idx) => (
-                    <div key={chat.id} className="flex items-center p-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg cursor-pointer transition-colors group">
-                      <div className="relative mr-3">
-                        <Avatar src={chat.avatarUrl || (chat.user && chat.user.avatarUrl)} name={chat.title || (chat.user && chat.user.name)} size="sm" />
-                        {idx === 0 && (
-                          <div className="absolute -bottom-1 -right-1 bg-[#3390ec] rounded-full p-0.5 border border-white dark:border-slate-900">
-                            <Check className="w-3 h-3 text-white" />
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex-1 text-[15px] font-medium text-slate-800 dark:text-slate-200">
-                        {chat.title || (chat.user && chat.user.name)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 flex justify-end gap-3">
-              <button 
-                onClick={() => setIsCreateGroupOpen(false)}
-                className="px-5 py-2.5 rounded-xl text-slate-600 dark:text-slate-300 font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-              >
-                Отмена
-              </button>
-              <button 
-                className={clsx(
-                  "px-5 py-2.5 rounded-xl text-white font-medium flex items-center transition-all",
-                  groupName.trim() ? "bg-[#3390ec] hover:bg-[#2884e0] shadow-md shadow-blue-500/20" : "bg-slate-300 dark:bg-slate-700 cursor-not-allowed"
-                )}
-                disabled={!groupName.trim()}
-              >
-                Далее <ArrowRight className="w-4 h-4 ml-2" />
-              </button>
-            </div>
-          </div>
+          ...
         </div>
       )}
+      */}
     </div>
   );
 }
