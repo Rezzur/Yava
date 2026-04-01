@@ -6,6 +6,10 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
+/**
+ * Сущность пользователя системы.
+ * Содержит учетные данные, информацию профиля и метаданные аккаунта.
+ */
 @Entity
 @Table(name = "users")
 @Data
@@ -18,10 +22,10 @@ public class User {
     private Long id;
 
     @Column(unique = true, nullable = false)
-    private String phone;
+    private String username;
 
     @Column(unique = true, nullable = false)
-    private String username;
+    private String phone;
 
     @Column(nullable = false)
     private String passwordHash;
@@ -32,6 +36,7 @@ public class User {
 
     private String avatarUrl;
 
+    /** Время последней активности пользователя для отображения статуса online */
     private LocalDateTime lastSeen;
 
     @CreationTimestamp

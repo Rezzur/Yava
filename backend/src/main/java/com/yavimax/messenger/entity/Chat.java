@@ -6,6 +6,10 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
+/**
+ * Сущность чата.
+ * Может быть приватным диалогом (PRIVATE), группой (GROUP) или каналом (CHANNEL).
+ */
 @Entity
 @Table(name = "chats")
 @Data

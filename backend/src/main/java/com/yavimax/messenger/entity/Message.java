@@ -6,6 +6,10 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
+/**
+ * Сущность сообщения в чате.
+ * Поддерживает различные типы контента: текст, голос, изображения и файлы.
+ */
 @Entity
 @Table(name = "messages")
 @Data
@@ -32,6 +36,7 @@ public class Message {
     @Column(nullable = false)
     private MessageType type;
 
+    /** URL-адрес медиафайла, хранящегося на сервере */
     private String mediaUrl;
 
     @Column(nullable = false)

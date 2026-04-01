@@ -2,14 +2,8 @@ package com.yavimax.messenger.service;
 
 import com.yavimax.messenger.dto.ChatDto;
 import com.yavimax.messenger.dto.MessageDto;
-import com.yavimax.messenger.entity.Chat;
-import com.yavimax.messenger.entity.ChatMember;
-import com.yavimax.messenger.entity.ChatMemberId;
-import com.yavimax.messenger.entity.ChatType;
-import com.yavimax.messenger.entity.MemberRole;
-import com.yavimax.messenger.entity.Message;
-import com.yavimax.messenger.entity.MessageType;
-import com.yavimax.messenger.entity.User;
+import com.yavimax.messenger.dto.UserSummaryDto;
+import com.yavimax.messenger.entity.*;
 import com.yavimax.messenger.repository.ChatMemberRepository;
 import com.yavimax.messenger.repository.ChatRepository;
 import com.yavimax.messenger.repository.MessageRepository;
@@ -28,6 +22,10 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+/**
+ * Сервис для управления чатами и сообщениями.
+ * Обеспечивает бизнес-логику создания чатов, отправки сообщений и управления статусами прочтения.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -40,6 +38,12 @@ public class ChatService {
     private final UserService userService;
     private final SimpMessagingTemplate messagingTemplate;
 
+    /**
+     * Получает список всех чатов пользователя.
+     *
+     * @param userId идентификатор пользователя
+     * @return список DTO чатов с последними сообщениями и счетчиками непрочитанных
+     */
     @Transactional(readOnly = true)
     public List<ChatDto> getUserChats(Long userId) {
         return chatMemberRepository.findByUserIdWithDetails(userId).stream()
@@ -47,55 +51,78 @@ public class ChatService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Создает новый приватный чат между двумя пользователями или возвращает существующий.
+     * Поддерживает создание чата с самим собой (Saved Messages).
+     *
+     * @param userId1 идентификатор первого пользователя
+     * @param userId2 идентификатор второго пользователя
+     * @return DTO созданного или найденного чата
+     */
     @Transactional
     public ChatDto createPrivateChat(Long userId1, Long userId2) {
-        Optional<Chat> existingChat;
-        if (userId1.equals(userId2)) {
-            existingChat = chatRepository.findByUserId(userId1).stream()
-                    .filter(c -> c.getType() == ChatType.PRIVATE)
-                    .filter(c -> {
-                        List<ChatMember> members = chatMemberRepository.findByChatId(c.getId());
-                        return members.size() == 1 && members.get(0).getUser().getId().equals(userId1);
-                    })
-                    .findFirst();
-        } else {
-            existingChat = chatRepository.findPrivateChatBetweenUsers(userId1, userId2);
+        log.info("Creating private chat between {} and {}", userId1, userId2);
+        try {
+            Optional<Chat> existingChat;
+            if (userId1.equals(userId2)) {
+                existingChat = chatRepository.findByUserId(userId1).stream()
+                        .filter(c -> c.getType() == ChatType.PRIVATE)
+                        .filter(c -> {
+                            List<ChatMember> members = chatMemberRepository.findByChatId(c.getId());
+                            return members.size() == 1 && members.get(0).getUser().getId().equals(userId1);
+                        })
+                        .findFirst();
+            } else {
+                existingChat = chatRepository.findPrivateChatBetweenUsers(userId1, userId2);
+            }
+
+            if (existingChat.isPresent()) {
+                log.info("Found existing chat: {}", existingChat.get().getId());
+                return toChatDto(userId1, existingChat.get());
+            }
+
+            Chat chat = Chat.builder()
+                    .type(ChatType.PRIVATE)
+                    .createdAt(LocalDateTime.now())
+                    .build();
+            chat = chatRepository.save(chat);
+
+            User user1 = userRepository.findById(userId1).orElseThrow(() -> new RuntimeException("User 1 not found"));
+            
+            ChatMember member1 = new ChatMember();
+            member1.setId(new ChatMemberId(chat.getId(), userId1));
+            member1.setChat(chat);
+            member1.setUser(user1);
+            member1.setRole(MemberRole.MEMBER);
+            member1.setJoinedAt(LocalDateTime.now());
+            chatMemberRepository.save(member1);
+
+            if (!userId1.equals(userId2)) {
+                User user2 = userRepository.findById(userId2).orElseThrow(() -> new RuntimeException("User 2 not found"));
+                ChatMember member2 = new ChatMember();
+                member2.setId(new ChatMemberId(chat.getId(), userId2));
+                member2.setChat(chat);
+                member2.setUser(user2);
+                member2.setRole(MemberRole.MEMBER);
+                member2.setJoinedAt(LocalDateTime.now());
+                chatMemberRepository.save(member2);
+            }
+
+            return toChatDto(userId1, chat);
+        } catch (Exception e) {
+            log.error("Error creating private chat: {}", e.getMessage(), e);
+            throw e;
         }
-
-        if (existingChat.isPresent()) {
-            return toChatDto(userId1, existingChat.get());
-        }
-
-        Chat chat = Chat.builder()
-                .type(ChatType.PRIVATE)
-                .createdAt(LocalDateTime.now())
-                .build();
-        chat = chatRepository.save(chat);
-
-        User user1 = userRepository.findById(userId1).orElseThrow(() -> new RuntimeException("User 1 not found"));
-        
-        ChatMember member1 = new ChatMember();
-        member1.setId(new ChatMemberId(chat.getId(), userId1));
-        member1.setChat(chat);
-        member1.setUser(user1);
-        member1.setRole(MemberRole.MEMBER);
-        member1.setJoinedAt(LocalDateTime.now());
-        chatMemberRepository.save(member1);
-
-        if (!userId1.equals(userId2)) {
-            User user2 = userRepository.findById(userId2).orElseThrow(() -> new RuntimeException("User 2 not found"));
-            ChatMember member2 = new ChatMember();
-            member2.setId(new ChatMemberId(chat.getId(), userId2));
-            member2.setChat(chat);
-            member2.setUser(user2);
-            member2.setRole(MemberRole.MEMBER);
-            member2.setJoinedAt(LocalDateTime.now());
-            chatMemberRepository.save(member2);
-        }
-
-        return toChatDto(userId1, chat);
     }
 
+    /**
+     * Получает историю сообщений чата с пагинацией.
+     *
+     * @param chatId идентификатор чата
+     * @param page номер страницы
+     * @param size размер страницы
+     * @return список DTO сообщений
+     */
     @Transactional(readOnly = true)
     public List<MessageDto> getChatMessages(Long chatId, int page, int size) {
         return messageRepository.findByChatIdOrderByCreatedAtDesc(chatId, PageRequest.of(page, size)).stream()
@@ -103,6 +130,16 @@ public class ChatService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Отправляет сообщение в чат и транслирует его через WebSocket.
+     *
+     * @param chatId идентификатор чата
+     * @param senderId идентификатор отправителя
+     * @param text текст сообщения
+     * @param type тип сообщения (TEXT, IMAGE, VOICE, FILE)
+     * @param mediaUrl URL медиафайла (если есть)
+     * @return DTO сохраненного сообщения
+     */
     @Transactional
     public MessageDto sendMessage(Long chatId, Long senderId, String text, MessageType type, String mediaUrl) {
         Chat chat = chatRepository.findById(chatId)
@@ -123,7 +160,7 @@ public class ChatService {
         Message saved = messageRepository.save(message);
         MessageDto dto = toMessageDto(saved);
 
-        // 1. Broadcast to the chat topic (for active users in this chat)
+        // Трансляция в топик чата
         ChatMessageHandler.WebSocketMessage<MessageDto> wsMessage = ChatMessageHandler.WebSocketMessage.<MessageDto>builder()
                 .type("message.created")
                 .payload(dto)
@@ -131,10 +168,9 @@ public class ChatService {
                 .build();
         messagingTemplate.convertAndSend("/topic/chats." + chatId, wsMessage);
 
-        // 2. Send to specific users (for sidebar updates in other browsers)
+        // Персональная трансляция участникам для обновления сайдбара
         List<ChatMember> members = chatMemberRepository.findByChatId(chatId);
         for (ChatMember member : members) {
-            // We can send to a user-specific queue
             messagingTemplate.convertAndSendToUser(
                 member.getUser().getUsername(), 
                 "/queue/messages", 
@@ -145,11 +181,20 @@ public class ChatService {
         return dto;
     }
 
+    /**
+     * Помечает все сообщения в чате как прочитанные для конкретного пользователя.
+     *
+     * @param chatId идентификатор чата
+     * @param userId идентификатор пользователя
+     */
     @Transactional
     public void markAsRead(Long chatId, Long userId) {
         messageRepository.markMessagesAsRead(chatId, userId);
     }
 
+    /**
+     * Преобразует сущность Chat в DTO.
+     */
     private ChatDto toChatDto(Long currentUserId, Chat chat) {
         if (chat == null) return null;
         
@@ -201,6 +246,9 @@ public class ChatService {
         return builder.build();
     }
 
+    /**
+     * Преобразует сущность Message в DTO.
+     */
     private MessageDto toMessageDto(Message message) {
         if (message == null) return null;
         return MessageDto.builder()
@@ -216,6 +264,9 @@ public class ChatService {
                 .build();
     }
 
+    /**
+     * Форматирует временную метку для отображения в списке чатов.
+     */
     private String formatTimestamp(LocalDateTime dateTime) {
         if (dateTime == null) return "";
         

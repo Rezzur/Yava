@@ -15,5 +15,6 @@ public class UserSummaryDto {
     private String username;
     private String phone;
     private String avatarUrl;
+    private String bio;
     private String status;
 }

@@ -15,10 +15,14 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * Контроллер для управления чатами и сообщениями.
+ * Предоставляет эндпоинты для получения списка чатов, создания новых чатов и отправки сообщений.
+ */
 @RestController
 @RequestMapping("/api/v1/chats")
 @RequiredArgsConstructor
-@Tag(name = "Chat", description = "Chat management endpoints")
+@Tag(name = "Chat", description = "Управление чатами и сообщениями")
 @SecurityRequirement(name = "bearerAuth")
 @Slf4j
 public class ChatController {
@@ -26,15 +30,26 @@ public class ChatController {
     private final ChatService chatService;
     private final UserService userService;
 
+    /**
+     * Возвращает список всех чатов текущего авторизованного пользователя.
+     *
+     * @return список DTO чатов
+     */
     @GetMapping
-    @Operation(summary = "Get user chats", description = "Returns list of chats for the current user")
+    @Operation(summary = "Получить чаты пользователя", description = "Возвращает список всех активных чатов текущего пользователя")
     public ResponseEntity<List<ChatDto>> getChats() {
         Long currentUserId = userService.getCurrentUserId();
         return ResponseEntity.ok(chatService.getUserChats(currentUserId));
     }
 
+    /**
+     * Создает новый приватный чат с указанным пользователем или возвращает существующий.
+     *
+     * @param userId идентификатор пользователя, с которым создается чат
+     * @return DTO созданного или найденного чата
+     */
     @PostMapping
-    @Operation(summary = "Create private chat", description = "Creates a new private chat with specified user or returns existing one")
+    @Operation(summary = "Создать приватный чат", description = "Создает новый приватный чат или возвращает существующий")
     public ResponseEntity<?> createChat(@RequestParam Long userId) {
         log.info("REST request to create chat with user: {}", userId);
         try {
@@ -47,8 +62,16 @@ public class ChatController {
         }
     }
 
+    /**
+     * Возвращает историю сообщений для конкретного чата с поддержкой пагинации.
+     *
+     * @param chatId идентификатор чата
+     * @param page   номер страницы (по умолчанию 0)
+     * @param size   размер страницы (по умолчанию 50)
+     * @return список DTO сообщений
+     */
     @GetMapping("/{chatId}/messages")
-    @Operation(summary = "Get chat messages", description = "Returns paginated messages for a specific chat")
+    @Operation(summary = "Получить сообщения чата", description = "Возвращает историю сообщений для указанного чата")
     public ResponseEntity<List<MessageDto>> getMessages(
             @PathVariable Long chatId,
             @RequestParam(defaultValue = "0") int page,
@@ -56,8 +79,15 @@ public class ChatController {
         return ResponseEntity.ok(chatService.getChatMessages(chatId, page, size));
     }
 
+    /**
+     * Отправляет новое сообщение в указанный чат.
+     *
+     * @param chatId  идентификатор чата
+     * @param request объект запроса с текстом и типом сообщения
+     * @return DTO созданного сообщения
+     */
     @PostMapping("/{chatId}/messages")
-    @Operation(summary = "Send message", description = "Sends a new message to a specific chat")
+    @Operation(summary = "Отправить сообщение", description = "Отправляет новое сообщение (текст, фото, файл или голос) в чат")
     public ResponseEntity<MessageDto> sendMessage(
             @PathVariable Long chatId,
             @RequestBody MessageRequest request) {
@@ -71,14 +101,23 @@ public class ChatController {
         ));
     }
 
+    /**
+     * Помечает все сообщения в чате как прочитанные.
+     *
+     * @param chatId идентификатор чата
+     * @return пустой ответ со статусом 200 OK
+     */
     @PostMapping("/{chatId}/read")
-    @Operation(summary = "Mark as read", description = "Marks all messages in chat as read for the current user")
+    @Operation(summary = "Пометить как прочитанное", description = "Сбрасывает счетчик непрочитанных сообщений в чате")
     public ResponseEntity<Void> markAsRead(@PathVariable Long chatId) {
         Long currentUserId = userService.getCurrentUserId();
         chatService.markAsRead(chatId, currentUserId);
         return ResponseEntity.ok().build();
     }
 
+    /**
+     * Вспомогательный класс для запроса на отправку сообщения.
+     */
     public static class MessageRequest {
         private String text;
         private String type;

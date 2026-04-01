@@ -11,33 +11,50 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * Контроллер для управления данными пользователей.
+ * Предоставляет поиск пользователей и доступ к профилю.
+ */
 @RestController
 @RequestMapping("/api/v1/users")
 @RequiredArgsConstructor
-@Tag(name = "Users", description = "User management endpoints")
+@Tag(name = "User", description = "Управление пользователями")
 @SecurityRequirement(name = "bearerAuth")
 public class UserController {
 
     private final UserService userService;
 
-    @GetMapping("/me")
-    @Operation(summary = "Get current user", description = "Returns the currently authenticated user")
-    public ResponseEntity<UserSummaryDto> getCurrentUser() {
-        return ResponseEntity.ok(userService.toUserSummary(userService.getCurrentUser()));
-    }
-
+    /**
+     * Выполняет глобальный поиск пользователей по имени, нику или телефону.
+     *
+     * @param query поисковый запрос
+     * @return список найденных пользователей
+     */
     @GetMapping("/search")
-    @Operation(summary = "Search users", description = "Search users by username, name, or phone")
-    public ResponseEntity<List<UserSummaryDto>> searchUsers(
-            @RequestParam String query,
-            @RequestParam(required = false) Long excludeChatId
-    ) {
-        Long currentUserId = userService.getCurrentUserId();
-        return ResponseEntity.ok(userService.searchUsers(query, currentUserId));
+    @Operation(summary = "Поиск пользователей", description = "Ищет пользователей по частичному совпадению имени, username или телефона")
+    public ResponseEntity<List<UserSummaryDto>> searchUsers(@RequestParam String query) {
+        return ResponseEntity.ok(userService.searchUsers(query));
     }
 
+    /**
+     * Возвращает профиль текущего авторизованного пользователя.
+     *
+     * @return DTO профиля пользователя
+     */
+    @GetMapping("/profile")
+    @Operation(summary = "Профиль текущего пользователя", description = "Возвращает информацию о текущем авторизованном пользователе")
+    public ResponseEntity<UserSummaryDto> getProfile() {
+        return ResponseEntity.ok(userService.getCurrentUserSummary());
+    }
+
+    /**
+     * Получает краткую информацию о пользователе по его ID.
+     *
+     * @param userId идентификатор пользователя
+     * @return DTO пользователя
+     */
     @GetMapping("/{userId}")
-    @Operation(summary = "Get user by ID")
+    @Operation(summary = "Получить пользователя по ID")
     public ResponseEntity<UserSummaryDto> getUserById(@PathVariable Long userId) {
         return ResponseEntity.ok(userService.getUserSummary(userId));
     }

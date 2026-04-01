@@ -16,17 +16,27 @@ import java.nio.file.StandardCopyOption;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * Контроллер для работы с файлами.
+ * Обеспечивает загрузку медиафайлов (фото, документы, голосовые сообщения) на сервер.
+ */
 @RestController
 @RequestMapping("/api/v1/files")
-@Tag(name = "Files", description = "File upload endpoints")
+@Tag(name = "Files", description = "Загрузка и хранение файлов")
 @Slf4j
 public class FileController {
 
     @Value("${app.upload.dir:uploads}")
     private String uploadDir;
 
+    /**
+     * Загружает файл на сервер и возвращает его публичный URL.
+     *
+     * @param file объект файла (multipart request)
+     * @return JSON с URL-адресом файла или ошибку
+     */
     @PostMapping("/upload")
-    @Operation(summary = "Upload a file", description = "Uploads a photo, document or voice message")
+    @Operation(summary = "Загрузить файл", description = "Загружает фото, документ или голосовое сообщение и возвращает URL")
     public ResponseEntity<?> uploadFile(@RequestParam("file") MultipartFile file) {
         if (file == null || file.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "File is empty or null"));
@@ -49,7 +59,7 @@ public class FileController {
             String filename = UUID.randomUUID().toString() + extension;
             Path targetPath = root.resolve(filename);
 
-            // Use StandardCopyOption.REPLACE_EXISTING to prevent errors
+            // Сохранение файла с перезаписью (REPLACE_EXISTING) для безопасности
             Files.copy(file.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
             
             log.info("File saved to: {}", targetPath);
