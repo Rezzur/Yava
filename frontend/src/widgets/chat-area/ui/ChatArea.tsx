@@ -19,7 +19,7 @@ export function ChatArea() {
   const [recordingTime, setRecordingTime] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<any>(null);
 
   const [isCallOpen, setIsCallOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);

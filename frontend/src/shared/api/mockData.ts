@@ -42,6 +42,7 @@ export const CHATS: ChatDTO[] = [
   {
     id: 1,
     type: "private",
+    title: "Павел Явимакс",
     user: USERS["1"],
     lastMessage: "Привет! Как тебе новый дизайн Yavimax?",
     unreadCount: 2,
@@ -62,10 +63,12 @@ export const CHATS: ChatDTO[] = [
   {
     id: 3,
     type: "private",
+    title: "Мама",
     user: USERS["2"],
     lastMessage: "Ты покушал?",
     unreadCount: 0,
-    timestamp: "Вчера"
+    timestamp: "Вчера",
+    isPinned: false
   },
   {
     id: 4,
@@ -75,15 +78,18 @@ export const CHATS: ChatDTO[] = [
     membersCount: 42,
     lastMessage: "Илья: Кто сломал прод?",
     unreadCount: 102,
-    timestamp: "Вчера"
+    timestamp: "Вчера",
+    isPinned: false
   },
   {
     id: 5,
     type: "private",
+    title: "Илья (Дизайн)",
     user: USERS["3"],
     lastMessage: "Скинь макеты по Явимаксу",
     unreadCount: 0,
-    timestamp: "Ср"
+    timestamp: "Ср",
+    isPinned: false
   }
 ];
 

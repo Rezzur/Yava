@@ -17,7 +17,7 @@ export const useUser = create<UserState>((set, get) => ({
   fetchCurrentUser: async () => {
     set({ isLoading: true });
     try {
-      const response = await userApi.me();
+      const response = await userApi.getProfile();
       set({ user: response.data, isLoading: false });
     } catch (error) {
       set({ isLoading: false });
